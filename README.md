@@ -28,7 +28,7 @@ Built in stages, one commit per stage:
 | 1 · See | Perception on video + warehouse simulation | done |
 | 2 · Predict | World model: Kalman + Monte Carlo collision risk | done |
 | 3 · Alert | Alert tiers, MQTT, phone buzz, evaluation | done |
-| 4 · Improve | Incident brief, what-if, dashboard | — |
+| 4 · Improve | pygame live demo, UI with reports, incident briefs | done |
 
 ## Data format
 
@@ -100,5 +100,53 @@ Crossing scenarios that end in contact: **47%** with no fix, 39% with a convex m
 1 m/s speed limit, and **10%** when the worker and driver react to world-model alerts.
 
 ![results](results/results.png)
+
+## Stage 4 · Improve
+
+```bash
+python demo_sim.py --mqtt      # live pygame demo (phone buzzes too); keys: A alerts, M mirror, S speed limit, R random, B demo
+streamlit run app.py           # the demo UI
+python -m iwm.report           # incident brief for the blind-corner near-miss
+```
+
+- `demo_sim.py`: the on-stage demo. Top-down warehouse in pygame with racking, forklift, walker,
+  5 s predicted paths, risk panel, alert log, and what-if keys.
+- `app.py`: Streamlit UI with five pages:
+  - **Overview:** the problem, architecture and headline results
+  - **Live scenario:** play an encounter, toggle what-if fixes, risk timeline, alerts, counterfactual "why", incident brief
+  - **Results:** the 1,000-run evaluation vs detection-only
+  - **Reports:** a simulated shift with KPIs, an executive summary, incident hotspots, the incident list with
+    briefs, and downloads (.md report, .csv incidents)
+  - **Camera:** alerts logged from real video
+- `iwm/report.py`: Azure OpenAI incident briefs and shift summaries (set the variables in `.env.example`),
+  with a template fallback so the demo never breaks.
+
+## 3-minute demo
+
+1. **Real video (60 s):** `run_camera.py` on your phone footage. Tracks and predicted paths appear, and the phone buzzes before the "forklift" reaches the corner.
+2. **Live simulation (45 s):** `demo_sim.py --mqtt`, blind corner. Contact at 3.9 s; the first alert came 3.1 s earlier, and detection-only fired 0.2 s before.
+   Press **A**: the worker and driver react to the alert and there is no contact.
+3. **Results (30 s):** UI → Results: 1,000 runs, 2.9 s vs 0.3 s warning, contacts 47% → 10%.
+4. **Reports (30 s):** UI → Reports: shift KPIs, hotspots, Azure OpenAI summary, download.
+5. **Close (15 s):** "Ravi feels a buzz four seconds before the forklift turns the corner."
+
+## Repo map
+
+```
+iwm/
+  schema.py      Track and Alert records
+  sim.py         blind-corner warehouse simulation + what-if rules
+  perception.py  YOLOv11 + ByteTrack + homography
+  worldmodel.py  Kalman + Monte Carlo futures + counterfactual explain
+  alerts.py      tiers, hysteresis, MQTT publisher
+  evaluate.py    1,000-run evaluation
+  demo.py        one session (shared by pygame demo and UI)
+  shift.py       shift report: incidents, summary, exports
+  report.py      Azure OpenAI briefs with template fallback
+  plots.py       figures for the UI
+app.py           Streamlit UI         demo_sim.py   pygame live demo
+run_camera.py    real-video pipeline  calibrate.py  camera calibration
+phone.html       phone "wristband"    mosquitto.conf
+```
 
 All tunable numbers are in `config.yaml`; Azure keys go in environment variables (see `.env.example`).
