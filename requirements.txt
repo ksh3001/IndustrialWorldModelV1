@@ -1,0 +1,19 @@
+# Core (world model, simulation, evaluation)
+numpy>=1.26
+pyyaml>=6.0
+matplotlib>=3.8
+
+# Perception (real video)
+ultralytics>=8.3      # YOLOv11 + built-in ByteTrack
+opencv-python>=4.9
+
+# Alerts
+paho-mqtt>=2.0
+
+# Dashboard + report
+streamlit>=1.38
+openai>=1.40          # Azure OpenAI client
+
+# Optional
+pygame>=2.5           # live top-down simulation viewer
+pytest>=8.0

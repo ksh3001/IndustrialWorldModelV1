@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+.venv/
+venv/
+.env
+*.pt
+data/*.mp4
+data/*.mov
+runs/
+logs/
+.pytest_cache/
+.DS_Store

@@ -1,0 +1,49 @@
+# Industrial World Model — POC configuration
+# All tunable numbers live here. Secrets come from environment variables.
+
+sim:
+  dt: 0.1                 # seconds per step (10 Hz)
+  width_m: 20.0
+  height_m: 12.0
+  corner: [10.0, 6.0]     # the blind-corner intersection (metres)
+  position_noise_m: 0.08  # simulated camera/tracker noise
+  worker_speed: [1.0, 1.6]     # m/s range
+  forklift_speed: [1.8, 3.0]   # m/s range
+  visibility_m: 2.5       # how close to the corner before the worker sees the forklift
+  reaction_s: 0.8         # human reaction time
+
+world_model:
+  horizon_s: 5.0          # how far ahead to roll futures
+  rollouts: 50            # futures per pair
+  contact_m: 1.5          # distance that counts as a collision
+  speed_noise: 0.15       # relative speed noise per future
+  heading_noise_worker: 0.25   # radians
+  heading_noise_forklift: 0.08 # radians
+  walker_stop_prob: 0.15  # chance a walker stops at some point in a future
+  seed: 7
+
+alerts:
+  # tier: [min probability, max time-to-contact in seconds]
+  advisory: [0.30, 5.0]
+  warning:  [0.60, 3.0]
+  critical: [0.85, 2.0]
+  rise_frames: 3          # frames a higher tier must persist before escalating
+  hold_s: 1.0             # time below a tier before dropping it
+  detection_only_m: 2.0   # baseline rule: alert when distance is below this now
+
+mqtt:
+  host: localhost
+  port: 1883
+  topic: iwm/alerts
+
+camera:
+  source: data/demo.mp4   # file path, webcam index (0) or rtsp:// URL
+  model: yolo11n.pt
+  worker_classes: [person]
+  # COCO has no forklift class: map the stand-in (cart/RC car/box) to these,
+  # or fine-tune on a forklift dataset and put its class name here.
+  forklift_classes: [car, truck, suitcase]
+  # Homography: 4 taped floor markers. Pixel positions (from calibrate.py)
+  # and their measured floor positions in metres, in the same order.
+  image_points: [[412, 620], [1510, 640], [1320, 980], [260, 950]]
+  floor_points: [[0.0, 0.0], [6.0, 0.0], [6.0, 4.0], [0.0, 4.0]]
