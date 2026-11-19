@@ -111,8 +111,9 @@ python -m iwm.report           # incident brief for the blind-corner near-miss
 
 - `demo_sim.py`: the on-stage demo. Top-down warehouse in pygame with racking, forklift, walker,
   5 s predicted paths, risk panel, alert log, and what-if keys.
-- `app.py`: Streamlit UI with five pages:
+- `app.py`: Streamlit UI with six pages:
   - **Overview:** the problem, architecture and headline results
+  - **Demo videos:** the annotated real video and the pygame simulation recording, side by side
   - **Live scenario:** play an encounter, toggle what-if fixes, risk timeline, alerts, counterfactual "why", incident brief
   - **Results:** the 1,000-run evaluation vs detection-only
   - **Reports:** a simulated shift with KPIs, an executive summary, incident hotspots, the incident list with
@@ -120,6 +121,19 @@ python -m iwm.report           # incident brief for the blind-corner near-miss
   - **Camera:** alerts logged from real video
 - `iwm/report.py`: Azure OpenAI incident briefs and shift summaries (set the variables in `.env.example`),
   with a template fallback so the demo never breaks.
+
+## Showing the demos in the UI
+
+pygame and the camera loop each open their own window, so record them once and the UI plays them:
+
+```bash
+python run_camera.py --source data/demo.mp4 --save data/camera_demo.mp4   # annotated real video
+python demo_sim.py --mqtt --record data/sim_demo.mp4                      # pygame demo (press A mid-run)
+streamlit run app.py                                                      # -> Demo videos page
+```
+
+Recordings are saved as H.264 when possible (auto-converted if `ffmpeg` is installed) so the browser can play
+them. On stage, use the UI as the main screen and keep the live pygame window as the "it's real" moment.
 
 ## 3-minute demo
 

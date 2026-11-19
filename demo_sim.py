@@ -2,6 +2,7 @@
 
     python demo_sim.py                 # blind-corner demo
     python demo_sim.py --mqtt          # also buzz the phone (needs mosquitto + phone.html)
+    python demo_sim.py --record data/sim_demo.mp4   # also record it for the UI's Demo videos page
 
 Keys:
     SPACE pause      R  new random crossing      B  blind-corner demo again
@@ -117,6 +118,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--mqtt", action="store_true", help="publish alerts so phone.html buzzes")
     ap.add_argument("--speed", type=float, default=1.0, help="playback speed")
+    ap.add_argument("--record", default=None, help="save the window to an .mp4 (e.g. data/sim_demo.mp4)")
     args = ap.parse_args()
     cfg = load_config()
     publisher = None
@@ -132,6 +134,11 @@ def main():
     fonts = (pygame.font.SysFont("arial", 14), pygame.font.SysFont("consolas,menlo,monospace", 16),
              pygame.font.SysFont("arial", 30, bold=True))
     clock = pygame.time.Clock()
+    recorder = None
+    if args.record:
+        from iwm.video import VideoRecorder
+
+        recorder = VideoRecorder(args.record, fps=30)
 
     whatif, scenario, seed = WhatIf(), "blind_corner", 1
     session = DemoSession(cfg, scenario, seed, whatif)
@@ -175,6 +182,11 @@ def main():
 
         draw_frame(screen, fonts, cfg, session, frame, whatif, paused, pygame.time.get_ticks() < flash_until)
         pygame.display.flip()
+        if recorder:
+            rgb = pygame.surfarray.array3d(screen).swapaxes(0, 1)  # (w, h, 3) -> (h, w, 3)
+            recorder.write(rgb[:, :, ::-1].copy())  # RGB -> BGR
+    if recorder:
+        recorder.close()
     pygame.quit()
 
 

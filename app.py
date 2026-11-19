@@ -4,6 +4,7 @@
 
 Pages (sidebar):
   Overview        the problem, how it works, headline results
+  Demo videos     pygame simulation + annotated real video, side by side
   Live scenario   play a simulated encounter, toggle what-if fixes, see risk + alerts + brief
   Results         1,000-run evaluation vs detection-only
   Reports         shift safety report: KPIs, hotspots, incident list, briefs, downloads
@@ -29,7 +30,7 @@ RESULTS = Path("results/results.json")
 
 st.sidebar.title("Industrial World Model")
 st.sidebar.caption("Team Future Frames · Industry & Energy")
-page = st.sidebar.radio("Page", ["Overview", "Live scenario", "Results", "Reports", "Camera"])
+page = st.sidebar.radio("Page", ["Overview", "Demo videos", "Live scenario", "Results", "Reports", "Camera"])
 
 
 @st.cache_resource(show_spinner="Rolling futures...")
@@ -83,6 +84,31 @@ if page == "Overview":
 
 *Privacy-first: positions only, no faces stored. Perception runs on real video; prediction is validated in
 simulation because real near-misses are too rare and too dangerous to stage.*""")
+
+# ------------------------------------------------------------------ Demo videos
+elif page == "Demo videos":
+    st.title("Demo: real video and simulation")
+    st.write("Left: perception on real CCTV-style footage. Right: the world model in the warehouse simulation, "
+             "where we can safely test thousands of near-misses.")
+    left, right = st.columns(2)
+    for col, path, title, cmd in (
+        (left, Path("data/camera_demo.mp4"), "Real video: tracking + predicted paths",
+         "python run_camera.py --source data/demo.mp4 --save data/camera_demo.mp4"),
+        (right, Path("data/sim_demo.mp4"), "Simulation: blind corner (pygame)",
+         "python demo_sim.py --mqtt --record data/sim_demo.mp4"),
+    ):
+        with col:
+            st.subheader(title)
+            if path.exists():
+                st.video(str(path))
+            else:
+                up = st.file_uploader(f"Upload {path.name}", type=["mp4", "webm", "mov"], key=path.name)
+                if up:
+                    st.video(up)
+                else:
+                    st.info(f"Record it with:\n\n`{cmd}`")
+    st.caption("Videos are read from the data/ folder. If one won't play in the browser, convert it to H.264 "
+               "with the ffmpeg command printed when recording.")
 
 # ---------------------------------------------------------------- Live scenario
 elif page == "Live scenario":
