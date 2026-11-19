@@ -111,14 +111,15 @@ python -m iwm.report           # incident brief for the blind-corner near-miss
 
 - `demo_sim.py`: the on-stage demo. Top-down warehouse in pygame with racking, forklift, walker,
   5 s predicted paths, risk panel, alert log, and what-if keys.
-- `app.py`: Streamlit UI with six pages:
-  - **Overview:** the problem, architecture and headline results
-  - **Demo videos:** the annotated real video and the pygame simulation recording, side by side
-  - **Live scenario:** play an encounter, toggle what-if fixes, risk timeline, alerts, counterfactual "why", incident brief
-  - **Results:** the 1,000-run evaluation vs detection-only
-  - **Reports:** a simulated shift with KPIs, an executive summary, incident hotspots, the incident list with
-    briefs, and downloads (.md report, .csv incidents)
-  - **Camera:** alerts logged from real video
+- `app.py` + `ui/`: the demo UI. The sidebar groups pages the way you present them, shows where you
+  are in the presentation flow, and shows system status (results, Azure OpenAI, camera log):
+  - **Present:** *Overview* (problem, headline numbers, how it works) · *Live demo* (scenario
+    picker, what-if fix pills, outcome banner, time slider / Play, risk and time-to-contact at each moment, alerts,
+    "why", incident brief) · *Demo videos* (real video and pygame recording side by side)
+  - **Evidence:** *Results* (1,000-run comparison and what it means) · *Shift reports* (KPIs, then Summary,
+    Incidents and Export tabs with hotspot map, executive summary, incident briefs, .md/.csv downloads)
+  - **Sources:** *Camera alerts* (alerts from real video and connection steps)
+  - Every page ends with a **Next** link, so you can click straight through the demo.
 - `iwm/report.py`: Azure OpenAI incident briefs and shift summaries (set the variables in `.env.example`),
   with a template fallback so the demo never breaks.
 

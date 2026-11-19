@@ -11,9 +11,9 @@ opencv-python>=4.9
 paho-mqtt>=2.0
 
 # Dashboard + report
-streamlit>=1.38
+streamlit>=1.42      # sidebar navigation, pills, segmented control
 openai>=1.40          # Azure OpenAI client
 
 # Optional
-pygame>=2.5           # live top-down simulation viewer
+pygame>=2.5           # live pygame demo (demo_sim.py)
 pytest>=8.0
