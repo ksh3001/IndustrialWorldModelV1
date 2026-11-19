@@ -1,0 +1,24 @@
+{
+  "runs": 1000,
+  "world_model": {
+    "contacts": 329,
+    "caught_pct": 98.78,
+    "lead_mean_s": 2.23,
+    "lead_median_s": 2.3,
+    "false_alarms_per_hour": 15.99,
+    "lead_first_alert_mean_s": 2.93
+  },
+  "detection_only": {
+    "contacts": 329,
+    "caught_pct": 100.0,
+    "lead_mean_s": 0.29,
+    "lead_median_s": 0.2,
+    "false_alarms_per_hour": 32.93
+  },
+  "crossing_contact_rate_pct": {
+    "No fix": 47.4,
+    "Convex mirror": 39.4,
+    "Speed limit 1 m/s": 41.8,
+    "World-model alerts": 9.6
+  }
+}

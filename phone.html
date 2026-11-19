@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<!--
+  The worker's "wristband" for the demo. Open on an Android phone in Chrome:
+    http://<laptop-ip>:8000/phone.html?broker=<laptop-ip>
+  (serve it with:  python -m http.server 8000)
+  Tap "Start" once (browsers only allow vibration after a tap).
+  Needs Mosquitto's WebSocket listener on port 9001 (see mosquitto.conf).
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>IWM Wristband</title>
+<script src="https://unpkg.com/mqtt@5/dist/mqtt.min.js"></script>
+<style>
+  body { margin: 0; height: 100vh; display: flex; flex-direction: column; align-items: center;
+         justify-content: center; font-family: system-ui, sans-serif; background: #0f172a; color: #fff;
+         transition: background .2s; text-align: center; }
+  h1 { font-size: 2.4rem; margin: .2em; }
+  p  { font-size: 1.1rem; opacity: .85; margin: .3em 1em; }
+  button { font-size: 1.4rem; padding: .8em 2em; border: 0; border-radius: 12px; background: #4f46e5; color: #fff; }
+  .advisory { background: #ca8a04; } .warning { background: #ea580c; } .critical { background: #dc2626; }
+</style>
+</head>
+<body>
+  <h1 id="title">Wristband</h1>
+  <p id="detail">Tap start to connect</p>
+  <button id="start">Start</button>
+<script>
+  const params = new URLSearchParams(location.search);
+  const broker = params.get("broker") || location.hostname || "localhost";
+  const topic = params.get("topic") || "iwm/alerts";
+  const patterns = { advisory: [200], warning: [600, 150, 600], critical: [1000, 100, 1000, 100, 1000] };
+  const title = document.getElementById("title"), detail = document.getElementById("detail");
+  let clearTimer;
+
+  document.getElementById("start").onclick = (e) => {
+    e.target.remove();
+    navigator.vibrate && navigator.vibrate(50);
+    const client = mqtt.connect(`ws://${broker}:9001`);
+    client.on("connect", () => { client.subscribe(topic); title.textContent = "Connected"; detail.textContent = "Watching for danger"; });
+    client.on("error", (err) => { detail.textContent = "Connection error: " + err.message; });
+    client.on("message", (_, payload) => {
+      const a = JSON.parse(payload.toString());
+      if (navigator.vibrate) navigator.vibrate(patterns[a.tier] || [300]);
+      document.body.className = a.tier;
+      title.textContent = a.tier.toUpperCase();
+      detail.textContent = `Forklift approaching · ${Math.round(a.p_collision * 100)}% · ${a.ttc_s.toFixed(1)} s`;
+      clearTimeout(clearTimer);
+      clearTimer = setTimeout(() => { document.body.className = ""; title.textContent = "Connected"; detail.textContent = "Watching for danger"; }, 4000);
+    });
+  };
+</script>
+</body>
+</html>

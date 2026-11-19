@@ -27,7 +27,7 @@ Built in stages, one commit per stage:
 | 0 | Scaffold: config, data format | done |
 | 1 · See | Perception on video + warehouse simulation | done |
 | 2 · Predict | World model: Kalman + Monte Carlo collision risk | done |
-| 3 · Alert | Alert tiers, MQTT, phone buzz, evaluation | — |
+| 3 · Alert | Alert tiers, MQTT, phone buzz, evaluation | done |
 | 4 · Improve | Incident brief, what-if, dashboard | — |
 
 ## Data format
@@ -72,5 +72,33 @@ python calibrate.py --source data/demo.mp4          # click 4 floor markers -> i
 ```bash
 pytest -q
 ```
+
+## Stage 3 · Alert
+
+- `iwm/alerts.py`: Advisory / Warning / Critical tiers with hysteresis (3 rising frames to escalate,
+  1 s below a threshold to drop). Alerts go to MQTT topic `iwm/alerts`, `logs/alerts.jsonl`, and a laptop beep.
+- `phone.html`: the worker's "wristband". Open on an Android phone, tap Start, and it vibrates on each alert.
+- `run_camera.py`: the full live pipeline on real video, with predicted paths drawn on the frame.
+- `iwm/evaluate.py`: 1,000 simulated runs, world model vs detection-only, plus what-if fixes.
+
+```bash
+mosquitto -c mosquitto.conf -v                      # terminal 1: broker (1883 + WebSocket 9001)
+python -m http.server 8000                          # terminal 2: open http://<laptop-ip>:8000/phone.html?broker=<laptop-ip> on the phone
+python run_camera.py --source data/demo.mp4         # terminal 3: live demo on real video
+python -m iwm.evaluate --runs 1000                  # results -> results/results.json, results/results.png
+```
+
+### Results (1,000 simulated runs, 329 with contact)
+
+| | Detection-only (< 2 m now) | World model |
+|---|---|---|
+| Contacts flagged before they happen | 100% (at the last moment) | 99% |
+| Average warning before contact | 0.3 s | 2.2 s (Warning) · 2.9 s (first alert) |
+| False alarms per simulated hour | 33 | 16 |
+
+Crossing scenarios that end in contact: **47%** with no fix, 39% with a convex mirror, 42% with a
+1 m/s speed limit, and **10%** when the worker and driver react to world-model alerts.
+
+![results](results/results.png)
 
 All tunable numbers are in `config.yaml`; Azure keys go in environment variables (see `.env.example`).

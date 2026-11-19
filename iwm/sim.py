@@ -5,11 +5,15 @@ It produces the same Track records as the camera pipeline, plus ground truth
 near-misses are too rare and too dangerous to stage.
 
 Layout: a horizontal forklift aisle and a vertical walkway meet at a corner
-hidden by racking. A worker only sees the forklift when both are within
-`visibility_m` of the corner (the "blind corner"), then stops after a human
-reaction time. What-if fixes change those rules:
-  - mirror:      convex mirror, the worker sees the forklift from further away
+hidden by racking. The worker and the driver only see each other when both are
+within `visibility_m` of the corner (the "blind corner"). After a human
+reaction time the worker stops while the forklift is moving, and the driver
+brakes (2.5 m/s^2); once the forklift has stopped, the pedestrian crosses first
+and the forklift waits until the walkway is clear. What-if fixes:
+  - mirror:      convex mirror, both see each other from 5 m
   - speed_limit: the forklift slows to 1 m/s near the corner
+  - workers_react_to_alerts: our alert reaches the worker's phone and the
+    driver's beeper, so both react before they can see each other
 
 Run:  python -m iwm.sim --scenario blind_corner --plot
 """
@@ -38,11 +42,12 @@ class Agent:
     pause_at: float = -1.0  # optional random pause (walkers)
     pause_len: float = 0.0
     pos: np.ndarray = field(default=None)
-    stopped_until: float = -1.0  # reacting worker waits until this time
+    crosses: bool = False  # walker's path goes through the corner
     done: bool = False
 
     def __post_init__(self):
         self.pos = self.start.astype(float).copy()
+        self.cur_speed = self.speed
         d = self.end - self.start
         self.dir = d / np.linalg.norm(d)
 
@@ -67,12 +72,12 @@ class Simulation:
         self.contact_t: float | None = None
         self.min_dist = np.inf
         self._alerted: dict[str, float] = {}  # worker id -> time alert received
-        self._seen: dict[str, float] = {}  # worker id -> time forklift first seen
+        self._seen: dict[str, float] = {}  # agent id -> time it first saw the other
         if scenario == "random":
             scenario = self.rng.choice(["crossing", "crossing", "crossing", "parallel"])
         self.scenario = scenario
         self.agents = self._build(scenario)
-        self.duration = max(a.t0 + np.linalg.norm(a.end - a.start) / a.speed for a in self.agents) + 3.0
+        self.duration = max(a.t0 + np.linalg.norm(a.end - a.start) / a.speed for a in self.agents) + 8.0
 
     # ------------------------------------------------------------------ setup
     def _build(self, scenario: str) -> list[Agent]:
@@ -108,7 +113,7 @@ class Simulation:
         if w_t0 < 0:
             f_t0, w_t0 = -w_t0, 0.0
 
-        worker = Agent("wk_01", WORKER, w_start, w_end, vw, w_t0)
+        worker = Agent("wk_01", WORKER, w_start, w_end, vw, w_t0, crosses=scenario != "parallel")
         if scenario != "blind_corner" and r.random() < 0.25:  # walkers sometimes pause
             worker.pause_at = w_t0 + r.uniform(0.5, 4.0)
             worker.pause_len = r.uniform(0.5, 2.0)
@@ -117,40 +122,48 @@ class Simulation:
 
     # ------------------------------------------------------------------- step
     def notify_alert(self, worker_id: str, tier: str) -> None:
-        """A worker's phone buzzed (used only when workers_react_to_alerts)."""
+        """Phone buzz + forklift beep (used only when workers_react_to_alerts)."""
         if self.whatif.workers_react_to_alerts and tier in ("warning", "critical"):
-            self._alerted.setdefault(worker_id, self.t)
+            for a in self.agents:
+                self._alerted.setdefault(a.id, self.t)
 
     def _forklift_ahead(self, f: Agent) -> bool:
         """True while the forklift has not yet passed the corner by 3 m."""
         return float(np.dot(self.corner - f.pos, f.dir)) > -3.0
 
     def step(self) -> list[Track]:
-        c = self.c
+        c, dt = self.c, self.dt
         f = next(a for a in self.agents if a.type == FORKLIFT)
-        vis = 8.0 if self.whatif.mirror else c["visibility_m"]
-        for a in self.agents:
-            if a.done or self.t < a.t0:
-                continue
-            speed = a.speed
-            if a.type == FORKLIFT and self.whatif.speed_limit and np.linalg.norm(a.pos - self.corner) < 5.0:
-                speed = min(speed, 1.0)
-            if a.type == WORKER:
-                # Sees the forklift only when both are near the blind corner.
-                if (np.linalg.norm(a.pos - self.corner) < vis and np.linalg.norm(f.pos - self.corner) < vis
-                        and self._forklift_ahead(f)):
-                    self._seen.setdefault(a.id, self.t)
-                trigger = min(self._seen.get(a.id, np.inf), self._alerted.get(a.id, np.inf))
-                reacting = self.t >= trigger + c["reaction_s"] and self._forklift_ahead(f)
-                pausing = a.pause_at <= self.t < a.pause_at + a.pause_len
-                if reacting or pausing:
-                    continue
-            a.pos = a.pos + a.dir * speed * self.dt
-            if np.dot(a.end - a.pos, a.dir) <= 0:
-                a.pos, a.done = a.end.copy(), True
+        w = next(a for a in self.agents if a.type == WORKER)
+        vis = 5.0 if self.whatif.mirror else c["visibility_m"]
+        near = lambda a: np.linalg.norm(a.pos - self.corner) < vis  # noqa: E731
+        walker_cleared = w.done or float(np.dot(w.pos - self.corner, w.dir)) > 2.0
+        if w.crosses and near(w) and near(f) and self._forklift_ahead(f) and not walker_cleared:
+            self._seen.setdefault(w.id, self.t)
+            self._seen.setdefault(f.id, self.t)
+
+        def triggered(a):
+            return self.t >= min(self._seen.get(a.id, np.inf), self._alerted.get(a.id, np.inf)) + c["reaction_s"]
+
+        # Forklift: brake once the driver reacts, until the walker is clear.
+        if not f.done and self.t >= f.t0:
+            target = f.speed
+            if self.whatif.speed_limit and np.linalg.norm(f.pos - self.corner) < 5.0:
+                target = min(target, 1.0)
+            if triggered(f) and not walker_cleared and self._forklift_ahead(f):
+                f.cur_speed = max(0.0, f.cur_speed - 2.5 * dt)
+            else:
+                f.cur_speed = min(target, f.cur_speed + 1.5 * dt) if f.cur_speed < target else target
+            self._move(f, f.cur_speed)
+
+        # Worker: stops while a forklift it knows about is still moving towards the corner.
+        if not w.done and self.t >= w.t0:
+            waiting = triggered(w) and self._forklift_ahead(f) and f.cur_speed > 0.2 and not walker_cleared
+            pausing = w.pause_at <= self.t < w.pause_at + w.pause_len
+            if not (waiting or pausing):
+                self._move(w, w.speed)
 
         # Ground truth: contact = closer than contact_m.
-        w = next(a for a in self.agents if a.type == WORKER)
         d = float(np.linalg.norm(w.pos - f.pos))
         if self.t >= max(w.t0, f.t0):
             self.min_dist = min(self.min_dist, d)
@@ -163,6 +176,11 @@ class Simulation:
             obs.append(Track(round(self.t, 2), a.id, a.type, float(noisy[0]), float(noisy[1])))
         self.t += self.dt
         return obs
+
+    def _move(self, a: Agent, speed: float) -> None:
+        a.pos = a.pos + a.dir * speed * self.dt
+        if np.dot(a.end - a.pos, a.dir) <= 0:
+            a.pos, a.done = a.end.copy(), True
 
     def run(self) -> list[list[Track]]:
         frames = []
