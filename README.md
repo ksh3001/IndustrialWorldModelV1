@@ -26,7 +26,7 @@ Built in stages, one commit per stage:
 |---|---|---|
 | 0 | Scaffold: config, data format | done |
 | 1 · See | Perception on video + warehouse simulation | done |
-| 2 · Predict | World model: Kalman + Monte Carlo collision risk | — |
+| 2 · Predict | World model: Kalman + Monte Carlo collision risk | done |
 | 3 · Alert | Alert tiers, MQTT, phone buzz, evaluation | — |
 | 4 · Improve | Incident brief, what-if, dashboard | — |
 
@@ -58,5 +58,19 @@ python calibrate.py --source data/demo.mp4          # click 4 floor markers -> i
   `parallel`, `random`.
 - `iwm/perception.py`: YOLOv11 + ByteTrack on video; box bottom-centre mapped to floor metres
   with a homography from 4 taped markers.
+
+## Stage 2 · Predict
+
+- `iwm/worldmodel.py`: a constant-velocity Kalman filter smooths each track and estimates its
+  velocity. For every worker-forklift pair, 50 futures are rolled 5 s ahead with noise on speed and
+  heading and a chance the walker stops. `p_collision` = share of futures within 1.5 m; `ttc_s` =
+  median time of first contact.
+- `explain()` re-runs the futures with one factor changed (forklift slows, worker stops, forklift
+  stops) and ranks which change lowers risk most.
+- `detection_only()` is the baseline we compare against: alert only when a pair is already < 2 m apart.
+
+```bash
+pytest -q
+```
 
 All tunable numbers are in `config.yaml`; Azure keys go in environment variables (see `.env.example`).
