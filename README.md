@@ -25,7 +25,7 @@ Built in stages, one commit per stage:
 | Stage | What | Status |
 |---|---|---|
 | 0 | Scaffold: config, data format | done |
-| 1 · See | Perception on video + warehouse simulation | — |
+| 1 · See | Perception on video + warehouse simulation | done |
 | 2 · Predict | World model: Kalman + Monte Carlo collision risk | — |
 | 3 · Alert | Alert tiers, MQTT, phone buzz, evaluation | — |
 | 4 · Improve | Incident brief, what-if, dashboard | — |
@@ -45,5 +45,18 @@ Every module exchanges two records (metres, seconds):
 python -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 ```
+
+## Stage 1 · See
+
+```bash
+python -m iwm.sim --scenario blind_corner --plot   # top-down run -> runs/sim.png
+python calibrate.py --source data/demo.mp4          # click 4 floor markers -> image_points
+```
+
+- `iwm/sim.py`: 20 x 12 m warehouse, one blind corner, a forklift and a walker. Emits the same
+  track records as the camera, plus the true contact time. Scenarios: `blind_corner`, `crossing`,
+  `parallel`, `random`.
+- `iwm/perception.py`: YOLOv11 + ByteTrack on video; box bottom-centre mapped to floor metres
+  with a homography from 4 taped markers.
 
 All tunable numbers are in `config.yaml`; Azure keys go in environment variables (see `.env.example`).
