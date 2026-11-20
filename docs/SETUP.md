@@ -52,7 +52,7 @@ python demo_sim.py --record data/sim_demo.mp4       # also save it for the UI's 
 The first run downloads `yolo11n.pt`. YOLO has no forklift class: an RC car (`car`) or wheeled suitcase (`suitcase`)
 works best as the stand-in; see `forklift_classes` in `config.yaml`.
 
-## 7. Phone buzz (phone and laptop on the same Wi-Fi)
+## 7. Phone buzz via phone.html + Mosquitto (phone and laptop on the same Wi-Fi)
 
 ```powershell
 & "C:\Program Files\mosquitto\mosquitto.exe" -c mosquitto.conf -v    # terminal 1
@@ -65,6 +65,21 @@ Test it first: `python -m iwm.alerts warning` sends one test alert (the phone sh
 Find the laptop IP with `ipconfig`, then on the phone open
 `http://<laptop-ip>:8000/phone.html?broker=<laptop-ip>` in Chrome and tap **Start**.
 Allow Python and Mosquitto through Windows Firewall (ports 1883, 9001, 8000).
+
+## 7b. Phone buzz the easy way: the ntfy app (no Mosquitto, no IP addresses)
+
+Both the laptop and the phone just need internet.
+
+1. **Phone:** install **ntfy** from the Play Store. Tap **+**, enter a hard-to-guess topic name
+   (e.g. `iwm-futureframes-7391`), tap **Subscribe**. Allow notifications.
+2. **Laptop:** add the same name to `.env`: `NTFY_TOPIC=iwm-futureframes-7391`
+3. **Test:** `python -m iwm.alerts warning`. The phone shows "WARNING: collision risk" with a long vibration.
+   `advisory` = normal buzz, `critical` = urgent, long vibration bursts.
+4. **Demo:** `python demo_sim.py` (and `run_camera.py`) now push alerts to the phone automatically.
+
+Notes: ntfy goes over the internet, so expect roughly a second of delay (the local `phone.html` route is faster).
+Some office networks block ntfy.sh: use the phone's hotspot. Anyone who knows the topic name can read the alerts,
+so don't use an obvious one.
 
 ## 8. Azure OpenAI (optional)
 

@@ -2,6 +2,7 @@
 
     python demo_sim.py                 # blind-corner demo
     python demo_sim.py --mqtt          # also buzz the phone (needs mosquitto + phone.html)
+                                       # with NTFY_TOPIC set in .env, the ntfy app buzzes automatically
     python demo_sim.py --record data/sim_demo.mp4   # also record it for the UI's Demo videos page
 
 Keys:
@@ -121,11 +122,9 @@ def main():
     ap.add_argument("--record", default=None, help="save the window to an .mp4 (e.g. data/sim_demo.mp4)")
     args = ap.parse_args()
     cfg = load_config()
-    publisher = None
-    if args.mqtt:
-        from iwm.alerts import Publisher
+    from iwm.alerts import NtfyNotifier, Publisher
 
-        publisher = Publisher(cfg)
+    publisher = Publisher(cfg) if args.mqtt or NtfyNotifier(cfg).enabled else None  # phone.html and/or ntfy app
 
     pygame.init()
     s = cfg["sim"]

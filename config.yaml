@@ -36,6 +36,13 @@ mqtt:
   port: 1883
   topic: iwm/alerts
 
+ntfy:
+  # Push alerts to the ntfy Android app (free, no account). Leave topic empty to turn off.
+  # Pick a hard-to-guess topic name: anyone who knows it can read your alerts.
+  # Can also be set with NTFY_TOPIC in .env.
+  server: https://ntfy.sh
+  topic: ""
+
 camera:
   source: data/demo.mp4   # file path, webcam index (0) or rtsp:// URL
   model: yolo11n.pt

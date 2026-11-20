@@ -87,7 +87,8 @@ pytest -q
 
 - `iwm/alerts.py`: Advisory / Warning / Critical tiers with hysteresis (3 rising frames to escalate,
   1 s below a threshold to drop). Alerts go to MQTT topic `iwm/alerts`, `logs/alerts.jsonl`, and a laptop beep.
-- `phone.html`: the worker's "wristband". Open on an Android phone, tap Start, and it vibrates on each alert.
+- Phone buzz, two options: `phone.html` (local, via Mosquitto: open on an Android phone, tap Start) or the free
+  **ntfy** Android app (set `NTFY_TOPIC` in `.env`; no broker or IP needed). See docs/SETUP.md.
 - `run_camera.py`: the full live pipeline on real video, with predicted paths drawn on the frame.
 - `iwm/evaluate.py`: 1,000 simulated runs, world model vs detection-only, plus what-if fixes.
 
