@@ -9,6 +9,7 @@ from pathlib import Path
 import streamlit as st
 
 from iwm import load_config
+from iwm.alerts import NtfyNotifier, Publisher
 from iwm.demo import DemoSession
 from iwm.shift import simulate_shift
 from iwm.sim import WhatIf
@@ -95,11 +96,22 @@ def sidebar_extras(current: str, flow: list[str]) -> None:
             ("World model", True, "ready"),
             ("Evaluation results", RESULTS.exists(), "loaded" if RESULTS.exists() else "run iwm.evaluate"),
             ("Azure OpenAI", azure_ready(), "connected" if azure_ready() else "template briefs"),
+            ("Phone (ntfy)", phone_ready(), f"topic {NtfyNotifier(CFG).topic}" if phone_ready() else "set NTFY_TOPIC in .env"),
             ("Camera log", CAMERA_LOG.exists(), "receiving" if CAMERA_LOG.exists() else "no video yet"),
         ]
         html = "".join(f'<div>{"🟢" if ok else "⚪"} {name}: <span style="color:#64748b">{note}</span></div>'
                        for name, ok, note in rows)
         st.markdown(f'<div class="iwm-status">{html}</div>', unsafe_allow_html=True)
+
+
+def phone_ready() -> bool:
+    return NtfyNotifier(CFG).enabled
+
+
+@st.cache_resource(show_spinner=False)
+def get_publisher() -> Publisher:
+    """One publisher for the UI: sends to the ntfy app (and to MQTT / phone.html if a broker is running)."""
+    return Publisher(CFG, log_path="logs/ui_alerts.jsonl", beep=False)
 
 
 @st.cache_resource(show_spinner="Rolling 50 futures per frame...")

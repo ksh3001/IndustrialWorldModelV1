@@ -11,8 +11,9 @@ from iwm.plots import floor_plot, hotspot_plot, risk_timeline
 from iwm.report import executive_summary, incident_brief
 from iwm.shift import incidents_csv, shift_report_markdown, shift_summary
 
-from .common import (CAMERA_LOG, CFG, TIER_ICON, badge, header, load_results, next_link, run_session, run_shift,
-                     whatif_picker)
+from .common import (CAMERA_LOG, CFG, TIER_ICON, badge, get_publisher, header, load_results, next_link, phone_ready,
+                     run_session, run_shift, whatif_picker)
+from iwm.schema import Alert
 
 NAV: dict = {}  # filled by app.py: name -> st.Page, used for "Next" links
 
@@ -70,6 +71,16 @@ def live_demo():
         label = c1.segmented_control("Scenario", list(SCENARIOS), default="Blind corner (demo)") or "Blind corner (demo)"
         seed = c2.number_input("Seed", 0, 10_000, 1, help="Change for a different random encounter.")
         react, mirror, limit = whatif_picker("live_fix")
+        p1, p2 = st.columns([3, 1])
+        buzz = p1.toggle("Buzz phone on Play", value=phone_ready(), disabled=not phone_ready(),
+                         help="Sends each alert to the ntfy app at the moment it happens. "
+                              "Set NTFY_TOPIC in .env and restart the UI to enable.")
+        if p2.button("Send test buzz", icon=":material/vibration:", disabled=not phone_ready()):
+            get_publisher().send(Alert(0.0, ["fl_test", "wk_test"], "warning", 0.75, 2.5, "test from the UI"), wait=True)
+            if get_publisher().ntfy.last_ok:
+                st.toast("Test alert sent to the phone", icon=":material/check_circle:")
+            else:
+                st.toast("Send failed: check internet (try the phone's hotspot)", icon=":material/error:")
     s = run_session(SCENARIOS[label], seed, react, mirror, limit)
     sm = s.summary()
 
@@ -99,9 +110,17 @@ def live_demo():
         view = st.empty()
     frames = list(range(0, int(t_end / dt), 2)) if play else [int(round(t_sel / dt))]
     state = right.empty()
+    prev_t = -1.0
     for i in frames:
+        t_frame = time.time()
         i = min(i, len(hist) - 1)
         fr = hist[i]
+        if play and buzz:  # send the alerts that happen in this step, at the moment they happen
+            for a in s.alerts:
+                if prev_t < a.t <= fr.t:
+                    get_publisher().send(a)
+                    st.toast(f"{TIER_ICON[a.tier]} {a.tier.upper()} sent to phone at {a.t:.1f} s")
+            prev_t = fr.t
         view.pyplot(floor_plot(s, i), clear_figure=True)
         top = max(fr.risks, key=lambda r: r.p_collision, default=None)
         with state.container(border=True):
@@ -111,8 +130,8 @@ def live_demo():
                 k[0].metric("Collision risk", f"{top.p_collision:.0%}")
                 k[1].metric("Time to contact", "-" if top.ttc_s == float("inf") else f"{top.ttc_s:.1f} s")
             st.caption("Detection-only camera: " + ("🔴 firing" if fr.detection_only else "silent"))
-        if play:
-            time.sleep(0.04)
+        if play:  # play in real time (2 frames = 0.2 s), so the buzz lines up with the picture
+            time.sleep(max(0.0, 2 * dt - (time.time() - t_frame)))
 
     with right:
         st.markdown("**Alerts sent**")
