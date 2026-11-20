@@ -8,7 +8,7 @@ instead of `.venv\Scripts\Activate.ps1`. Run every command from the project fold
 - **Python 3.11 or 3.12** (python.org, tick "Add to PATH"). Avoid 3.13 for now.
 - **Git**
 - **Mosquitto** (phone buzz): Windows installer from mosquitto.org
-- **ffmpeg** (browser-playable recordings): `winget install ffmpeg`
+- ffmpeg is bundled through pip (`imageio-ffmpeg`), nothing extra to install
 
 ## 2. Get the code and set up Python
 

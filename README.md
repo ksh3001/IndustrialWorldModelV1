@@ -143,7 +143,7 @@ python demo_sim.py --mqtt --record data/sim_demo.mp4                      # pyga
 streamlit run app.py                                                      # -> Demo videos page
 ```
 
-Recordings are saved as H.264 when possible (auto-converted if `ffmpeg` is installed) so the browser can play
+Recordings are converted to H.264 with the ffmpeg bundled by `imageio-ffmpeg`, so the browser can play
 them. On stage, use the UI as the main screen and keep the live pygame window as the "it's real" moment.
 
 ## 3-minute demo

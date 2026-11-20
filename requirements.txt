@@ -6,6 +6,7 @@ matplotlib>=3.8
 # Perception (real video)
 ultralytics>=8.3      # YOLOv11 + built-in ByteTrack
 opencv-python>=4.9
+imageio-ffmpeg>=0.5   # bundled ffmpeg: makes recordings play in the browser
 
 # Alerts
 paho-mqtt>=2.0
