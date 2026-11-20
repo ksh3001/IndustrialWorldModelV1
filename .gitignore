@@ -6,6 +6,8 @@ venv/
 *.pt
 data/*.mp4
 data/*.mov
+!data/samples/
+!data/samples/*.mp4
 runs/
 logs/
 .pytest_cache/
