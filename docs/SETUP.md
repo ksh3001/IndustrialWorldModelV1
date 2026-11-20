@@ -60,6 +60,8 @@ python -m http.server 8000                                             # termina
 python demo_sim.py --mqtt                                              # terminal 3 (or run_camera.py)
 ```
 
+Test it first: `python -m iwm.alerts warning` sends one test alert (the phone should vibrate).
+
 Find the laptop IP with `ipconfig`, then on the phone open
 `http://<laptop-ip>:8000/phone.html?broker=<laptop-ip>` in Chrome and tap **Start**.
 Allow Python and Mosquitto through Windows Firewall (ports 1883, 9001, 8000).

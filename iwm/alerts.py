@@ -97,3 +97,18 @@ class Publisher:
         if self.beep and alert.tier in ("warning", "critical"):
             sys.stdout.write("\a")  # laptop beep = the forklift's horn in the demo
         print(f"[ALERT] {alert.tier.upper():8s} {alert.pair} p={alert.p_collision:.2f} ttc={alert.ttc_s:.1f}s")
+
+
+if __name__ == "__main__":
+    # Test the phone buzz without running a demo:  python -m iwm.alerts warning
+    import time as _time
+
+    from . import load_config
+
+    tier = sys.argv[1] if len(sys.argv) > 1 else "warning"
+    pub = Publisher(load_config(), log_path="logs/test_alerts.jsonl", beep=False)
+    if pub.client is None:
+        raise SystemExit("MQTT broker not reachable: start Mosquitto with  mosquitto -c mosquitto.conf -v")
+    pub.send(Alert(0.0, ["fl_test", "wk_test"], tier, 0.75, 2.5, "test alert"))
+    _time.sleep(1.0)  # let the message go out before exiting
+    print("Sent. The phone should vibrate now.")
