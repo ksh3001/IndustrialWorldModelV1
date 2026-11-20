@@ -30,6 +30,16 @@ Built in stages, one commit per stage:
 | 3 · Alert | Alert tiers, MQTT, phone buzz, evaluation | done |
 | 4 · Improve | pygame live demo, UI with reports, incident briefs | done |
 
+## Docs
+
+| File | What |
+|---|---|
+| [docs/IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md) | The implementation plan this repo was built from, plus plan-vs-build notes |
+| [docs/Industrial_World_Model_Detailed_Plan.pdf](docs/Industrial_World_Model_Detailed_Plan.pdf) | Full solution plan: problem, architecture, scope, demo script, judge Q&A |
+| [docs/SETUP.md](docs/SETUP.md) | Run it on your laptop (Windows PowerShell, step by step) |
+| [docs/architecture.png](docs/architecture.png) | System architecture diagram |
+| [docs/ui-preview/](docs/ui-preview/) | Previews of the UI and the pygame window |
+
 ## Data format
 
 Every module exchanges two records (metres, seconds):
