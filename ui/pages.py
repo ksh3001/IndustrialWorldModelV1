@@ -217,7 +217,18 @@ def real_video():
         return
     mapper = None if calib.startswith("Calibrated") else ApproxScale(w, h, width_m)
     with st.spinner("Loading YOLO (first run downloads the model)..."):
-        perception = Perception(CFG, str(source), mapper=mapper, stride=stride)
+        try:
+            perception = Perception(CFG, str(source), mapper=mapper, stride=stride)
+        except Exception as e:  # usually: model download blocked by a corporate network
+            model = CFG["camera"]["model"]
+            st.error(f"Couldn't load the YOLO model `{model}`: {e.__class__.__name__}", icon=":material/error:")
+            st.markdown(
+                f"This usually means the network blocked the model download (corporate SSL inspection).\n\n"
+                f"1. Download it in your browser: "
+                f"https://github.com/ultralytics/assets/releases/download/v8.4.0/{model}\n"
+                f"2. Put `{model}` in the project folder (next to `app.py`) and press **Analyse video** again.\n\n"
+                f"Permanent fix: `pip install pip-system-certs`, then restart the UI.")
+            return
     pipe = VideoPipeline(CFG, perception.homography, get_camera_publisher() if buzz else None)
     out_path = Path("data/processed") / f"{source.stem}_annotated.mp4"
     recorder = VideoRecorder(str(out_path), fps=(fps or 15) / stride)

@@ -56,7 +56,9 @@ and predicted paths; alerts go to the phone (ntfy) as they happen and the annota
 4. `python run_camera.py --source data/demo.mp4 --save data/camera_demo.mp4`
    (no calibration? add `--approx 15` for a frame about 15 m wide)
 
-The first run downloads `yolo11n.pt`. YOLO has no forklift class: an RC car (`car`) or wheeled suitcase (`suitcase`)
+The first run downloads `yolo11n.pt`. On an office network that blocks it (`CERTIFICATE_VERIFY_FAILED`), download
+https://github.com/ultralytics/assets/releases/download/v8.4.0/yolo11n.pt in your browser and put it in the project
+folder, or run `pip install pip-system-certs` so Python trusts the company certificate. YOLO has no forklift class: an RC car (`car`) or wheeled suitcase (`suitcase`)
 works best as the stand-in; see `forklift_classes` in `config.yaml`.
 
 ## 7. Phone buzz via phone.html + Mosquitto (phone and laptop on the same Wi-Fi)
