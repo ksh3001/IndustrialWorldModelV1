@@ -90,8 +90,9 @@ class NtfyNotifier:
         return bool(self.topic)
 
     def _post(self, alert: Alert) -> None:
-        body = (f"Forklift approaching: {alert.p_collision:.0%} collision risk, "
-                f"contact in {alert.ttc_s:.1f} s." + (f" Fix: {alert.cause}." if alert.cause else ""))
+        action = {"advisory": "Look around.", "warning": "Slow down and look.", "critical": "STOP now."}
+        body = (f"Vehicle approaching: {alert.p_collision:.0%} collision risk, contact in {alert.ttc_s:.1f} s. "
+                + action.get(alert.tier, "Look around."))
         req = urllib.request.Request(f"{self.server}/{self.topic}", data=body.encode("utf-8"), method="POST", headers={
             "Title": f"{alert.tier.upper()}: collision risk",
             "Priority": NTFY_PRIORITY.get(alert.tier, "default"),

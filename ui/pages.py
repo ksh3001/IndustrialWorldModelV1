@@ -5,14 +5,16 @@ from __future__ import annotations
 import json
 import time
 
+import cv2
+
 import streamlit as st
 
 from iwm.plots import floor_plot, hotspot_plot, risk_timeline
 from iwm.report import executive_summary, incident_brief
 from iwm.shift import incidents_csv, shift_report_markdown, shift_summary
 
-from .common import (CAMERA_LOG, CFG, TIER_ICON, badge, get_publisher, header, load_results, next_link, phone_ready,
-                     run_session, run_shift, whatif_picker)
+from .common import (CAMERA_LOG, CFG, TIER_ICON, badge, get_camera_publisher, get_publisher, header, load_results,
+                     next_link, phone_ready, run_session, run_shift, whatif_picker)
 from iwm.schema import Alert
 
 NAV: dict = {}  # filled by app.py: name -> st.Page, used for "Next" links
@@ -151,14 +153,121 @@ def live_demo():
         if st.button("Generate brief"):
             first = s.alerts[0].to_dict() if s.alerts else None
             st.code(incident_brief(sm, first, s.last_reasons), language=None, wrap_lines=True)
-    next_link(NAV["videos"], "see it on real video")
+    next_link(NAV["real"], "run it on a real video")
+
+
+# ---------------------------------------------------------------------------- 2b
+def real_video():
+    from pathlib import Path
+
+    header("Step 3 · Real video", "Upload a video, get alerts",
+           "Runs the full pipeline on real footage: YOLO tracks workers and vehicles, the world model predicts "
+           "their next 5 seconds, and alerts go to the worker's phone as they happen.")
+    try:
+        import ultralytics  # noqa: F401
+    except ImportError:
+        st.error("YOLO isn't installed. Run `pip install -r requirements.txt`, then restart the UI.")
+        return
+
+    data = Path("data")
+    with st.container(border=True):
+        up = st.file_uploader("Upload a video", type=["mp4", "mov", "avi", "mkv"],
+                              help="A fixed, high camera works best (like CCTV).")
+        existing = sorted(str(p) for p in list(data.glob("*.mp4")) + list(data.glob("samples/*.mp4"))
+                          + list(data.glob("uploads/*")) if "_annotated" not in p.name and "_raw" not in p.name)
+        pick = st.selectbox("…or choose a video already in data/", ["—"] + existing)
+        c1, c2, c3 = st.columns(3)
+        calib = c1.radio("Distances", ["Approximate (no calibration)", "Calibrated (config.yaml)"],
+                         help="Calibrated uses the 4 floor markers from calibrate.py. Approximate assumes the "
+                              "frame is roughly top-down and the width you set.")
+        width_m = c2.number_input("Scene width (m)", 3.0, 100.0, 15.0, 1.0,
+                                  disabled=calib.startswith("Calibrated"),
+                                  help="Roughly how many metres the frame spans left to right.")
+        stride = c3.select_slider("Speed", options=[1, 2, 3, 4], value=2,
+                                  format_func=lambda n: f"every {n} frame{'s' if n > 1 else ''}",
+                                  help="Process fewer frames to keep up on a laptop CPU.")
+        o1, o2 = st.columns(2)
+        buzz = o1.toggle("Send alerts to phone", value=phone_ready(), disabled=not phone_ready(),
+                         help="ntfy app (NTFY_TOPIC in .env), plus phone.html if Mosquitto is running.")
+        realtime = o2.toggle("Play in real time", value=True,
+                             help="Off = process as fast as possible.")
+        start = st.button("Analyse video", icon=":material/play_arrow:", type="primary")
+
+    source = None
+    if up is not None:
+        (data / "uploads").mkdir(parents=True, exist_ok=True)
+        source = data / "uploads" / up.name
+        source.write_bytes(up.getbuffer())
+    elif pick != "—":
+        source = Path(pick)
+    if not start:
+        st.caption("Choose a video and press Analyse. Click any control (or Stop, top right) to stop early.")
+        return
+    if source is None:
+        st.warning("Upload a video or choose one first.")
+        return
+
+    from iwm.perception import ApproxScale, Perception, video_info
+    from iwm.pipeline import VideoPipeline
+    from iwm.video import VideoRecorder
+
+    w, h, fps = video_info(str(source))
+    if not w:
+        st.error(f"Couldn't open {source}.")
+        return
+    mapper = None if calib.startswith("Calibrated") else ApproxScale(w, h, width_m)
+    with st.spinner("Loading YOLO (first run downloads the model)..."):
+        perception = Perception(CFG, str(source), mapper=mapper, stride=stride)
+    pipe = VideoPipeline(CFG, perception.homography, get_camera_publisher() if buzz else None)
+    out_path = Path("data/processed") / f"{source.stem}_annotated.mp4"
+    recorder = VideoRecorder(str(out_path), fps=(fps or 15) / stride)
+
+    left, right = st.columns([3, 2], gap="large")
+    view = left.empty()
+    progress = left.progress(0.0, text="Analysing...")
+    state, log = right.empty(), right.empty()
+    total = max(1, int(cv2.VideoCapture(str(source)).get(cv2.CAP_PROP_FRAME_COUNT)) // stride)
+    t0 = time.time()
+    for i, (frame, t, dets) in enumerate(perception.stream()):
+        annotated, info = pipe.step(frame, t, dets)
+        recorder.write(annotated)
+        for a in info.new_alerts:
+            st.toast(f"{TIER_ICON[a.tier]} {a.tier.upper()} at {a.t:.1f} s" + (" · sent to phone" if buzz else ""))
+        small = cv2.resize(annotated, (960, int(960 * annotated.shape[0] / annotated.shape[1])))
+        view.image(small[:, :, ::-1], channels="RGB")
+        progress.progress(min(1.0, (i + 1) / total), text=f"Analysing... {t:.1f} s")
+        with state.container(border=True):
+            st.markdown(f"**At {t:.1f} s** &nbsp; {badge(info.tier)}", unsafe_allow_html=True)
+            k = st.columns(3)
+            k[0].metric("Workers", info.workers)
+            k[1].metric("Vehicles", info.vehicles)
+            k[2].metric("Risk", f"{info.p_collision:.0%}")
+        if pipe.alerts:
+            log.dataframe([a.to_dict() | {"tier": f"{TIER_ICON[a.tier]} {a.tier}"} for a in pipe.alerts],
+                          column_order=list(ALERT_COLUMNS), column_config=ALERT_COLUMNS, hide_index=True)
+        if realtime:
+            time.sleep(max(0.0, t - (time.time() - t0)))
+    recorder.close()
+    progress.empty()
+
+    if pipe.alerts:
+        first = pipe.alerts[0]
+        st.error(f"**{len(pipe.alerts)} alerts, peak {pipe.peak.upper()}.** First alert at {first.t:.1f} s "
+                 f"(risk {first.p_collision:.0%}, contact predicted in {first.ttc_s:.1f} s).", icon=":material/warning:")
+    else:
+        st.success("**No collision risk detected in this video.** If people and vehicles were visible but not "
+                   "boxed, check the forklift_classes in config.yaml.", icon=":material/check_circle:")
+    if out_path.exists():
+        st.markdown("**Annotated video** (also saved to " + f"`{out_path}`)")
+        st.video(str(out_path))
+    next_link(NAV["videos"], "real video and simulation side by side")
 
 
 # ----------------------------------------------------------------------------- 3
 def demo_videos():
     from pathlib import Path
 
-    header("Step 3 · Demo videos", "Real video and simulation, side by side",
+    header("Step 4 · Demo videos", "Real video and simulation, side by side",
            "Left: tracking on real CCTV-style footage. Right: the pygame simulation, where thousands of "
            "near-misses can be tested safely.")
     left, right = st.columns(2, gap="large")
@@ -184,7 +293,7 @@ def demo_videos():
 
 # ----------------------------------------------------------------------------- 4
 def results():
-    header("Step 4 · Results", "The evidence: 1,000 simulated encounters",
+    header("Step 5 · Results", "The evidence: 1,000 simulated encounters",
            "World model vs a detection-only camera that alerts when a pair is already under 2 m apart.")
     res = load_results()
     if not res:
@@ -212,7 +321,7 @@ def results():
 
 # ----------------------------------------------------------------------------- 5
 def reports():
-    header("Step 5 · Shift reports", "What a site manager sees after a shift",
+    header("Step 6 · Shift reports", "What a site manager sees after a shift",
            "Every alert becomes an incident with a brief, a hotspot and a suggested fix.")
     with st.container(border=True):
         c1, c2 = st.columns([3, 1])

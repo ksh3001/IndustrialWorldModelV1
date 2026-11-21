@@ -1,11 +1,16 @@
-"""Perception on real video: YOLOv11 + ByteTrack + floor homography.
+"""Perception on real video: YOLOv11 + ByteTrack + pixel-to-floor mapping.
 
 Turns camera frames into floor-plane detections (metres), the same shape
 the simulation produces, so the world model never knows the difference.
 
     from iwm.perception import Perception
-    for frame, t, dets in Perception(cfg).stream():
+    for frame, t, dets in Perception(cfg, "data/demo.mp4").stream():
         ...  # dets: [{"id": "wk_3", "type": "worker", "x": 2.1, "y": 3.4, "bbox": [...]}]
+
+Two ways to map pixels to metres:
+  - Homography:  calibrated from 4 taped floor markers (calibrate.py). Accurate.
+  - ApproxScale: no calibration; assumes the frame is roughly top-down and
+                 `width_m` metres wide. Good enough for a demo on a downloaded clip.
 """
 
 from __future__ import annotations
@@ -36,8 +41,32 @@ class Homography:
         return int(p[0]), int(p[1])
 
 
+class ApproxScale:
+    """Uncalibrated fallback: a uniform metres-per-pixel scale (frame is `width_m` wide)."""
+
+    def __init__(self, frame_width_px: int, frame_height_px: int, width_m: float = 15.0):
+        self.s = width_m / float(frame_width_px)  # metres per pixel
+        self.h = frame_height_px
+
+    def to_floor(self, u: float, v: float) -> tuple[float, float]:
+        return float(u * self.s), float((self.h - v) * self.s)
+
+    def to_pixel(self, x: float, y: float) -> tuple[int, int]:
+        return int(x / self.s), int(self.h - y / self.s)
+
+
+def video_info(source) -> tuple[int, int, float | None]:
+    """(width, height, fps) of a video file or stream; fps is None for live streams."""
+    cap = cv2.VideoCapture(source)
+    w, h = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)), int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    fps = cap.get(cv2.CAP_PROP_FPS)
+    cap.release()
+    live = isinstance(source, int) or str(source).startswith(("rtsp", "http"))
+    return w, h, (None if live or not fps else float(fps))
+
+
 class Perception:
-    def __init__(self, cfg: dict, source=None):
+    def __init__(self, cfg: dict, source=None, mapper=None, stride: int = 1, conf: float = 0.3):
         from ultralytics import YOLO  # imported here so the rest of the repo runs without it
 
         cam = cfg["camera"]
@@ -45,31 +74,23 @@ class Perception:
         if isinstance(self.source, str) and self.source.isdigit():
             self.source = int(self.source)
         self.model = YOLO(cam["model"])
-        self.homography = Homography(cam["image_points"], cam["floor_points"])
-        names = self.model.names  # class id -> name
+        self.homography = mapper or Homography(cam["image_points"], cam["floor_points"])
+        self.stride, self.conf = max(1, int(stride)), conf
         self.kind = {}
-        for cid, name in names.items():
+        for cid, name in self.model.names.items():  # class id -> name
             if name in cam["worker_classes"]:
                 self.kind[cid] = WORKER
             elif name in cam["forklift_classes"]:
                 self.kind[cid] = FORKLIFT
-        self.fps = self._fps()
-
-    def _fps(self) -> float | None:
-        if isinstance(self.source, str) and not self.source.startswith(("rtsp", "http")):
-            cap = cv2.VideoCapture(self.source)
-            fps = cap.get(cv2.CAP_PROP_FPS)
-            cap.release()
-            return fps or None
-        return None  # live stream: use wall-clock time
+        self.width, self.height, self.fps = video_info(self.source)
 
     def stream(self):
-        """Yield (frame, t_seconds, detections) for every frame."""
+        """Yield (frame, t_seconds, detections) for every processed frame."""
         t_start = time.time()
         results = self.model.track(self.source, stream=True, persist=True, tracker="bytetrack.yaml",
-                                   classes=list(self.kind), verbose=False)
+                                   classes=list(self.kind), conf=self.conf, vid_stride=self.stride, verbose=False)
         for i, r in enumerate(results):
-            t = i / self.fps if self.fps else time.time() - t_start
+            t = i * self.stride / self.fps if self.fps else time.time() - t_start
             dets = []
             if r.boxes is not None and r.boxes.id is not None:
                 for box, cid, tid in zip(r.boxes.xyxy.cpu().numpy(), r.boxes.cls.cpu().numpy().astype(int),

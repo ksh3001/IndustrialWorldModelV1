@@ -114,6 +114,12 @@ def get_publisher() -> Publisher:
     return Publisher(CFG, log_path="logs/ui_alerts.jsonl", beep=False)
 
 
+@st.cache_resource(show_spinner=False)
+def get_camera_publisher() -> Publisher:
+    """Publisher for real-video alerts: phone (ntfy / phone.html) + logs/alerts.jsonl for the Camera alerts page."""
+    return Publisher(CFG, log_path=str(CAMERA_LOG), beep=False)
+
+
 @st.cache_resource(show_spinner="Rolling 50 futures per frame...")
 def run_session(scenario: str, seed: int, react: bool, mirror: bool, limit: bool) -> DemoSession:
     s = DemoSession(CFG, scenario, int(seed), WhatIf(mirror=mirror, speed_limit=limit, workers_react_to_alerts=react))

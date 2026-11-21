@@ -126,7 +126,9 @@ python -m iwm.report           # incident brief for the blind-corner near-miss
   are in the presentation flow, and shows system status (results, Azure OpenAI, camera log):
   - **Present:** *Overview* (problem, headline numbers, how it works) · *Live demo* (scenario
     picker, what-if fix pills, outcome banner, time slider / Play, risk and time-to-contact at each moment, alerts,
-    "why", incident brief) · *Demo videos* (real video and pygame recording side by side)
+    "why", incident brief, phone buzz on Play) · *Real video* (upload or pick a clip; YOLO + world model run frame by
+    frame, predicted paths drawn live, alerts sent to the worker's phone as they happen, annotated video saved)
+    · *Demo videos* (real video and pygame recording side by side)
   - **Evidence:** *Results* (1,000-run comparison and what it means) · *Shift reports* (KPIs, then Summary,
     Incidents and Export tabs with hotspot map, executive summary, incident briefs, .md/.csv downloads)
   - **Sources:** *Camera alerts* (alerts from real video and connection steps)

@@ -44,10 +44,17 @@ python demo_sim.py --record data/sim_demo.mp4       # also save it for the UI's 
 
 ## 6. Real video
 
+**In the UI (easiest):** open **Real video**, upload a clip (or pick one from `data/`), choose
+*Approximate* distances and the scene width (e.g. 15 m), and press **Analyse video**. The video plays with tracking
+and predicted paths; alerts go to the phone (ntfy) as they happen and the annotated video is saved to `data/processed/`.
+
+**From the terminal:**
+
 1. Film the corner with a phone mounted 2.5–3 m high; tape 4 floor markers and measure them (`floor_points` in `config.yaml`).
 2. Copy the clip to `data\demo.mp4`.
 3. `python calibrate.py` → click the 4 markers → paste `image_points` into `config.yaml`.
 4. `python run_camera.py --source data/demo.mp4 --save data/camera_demo.mp4`
+   (no calibration? add `--approx 15` for a frame about 15 m wide)
 
 The first run downloads `yolo11n.pt`. YOLO has no forklift class: an RC car (`car`) or wheeled suitcase (`suitcase`)
 works best as the stand-in; see `forklift_classes` in `config.yaml`.
