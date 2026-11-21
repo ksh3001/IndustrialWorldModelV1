@@ -120,7 +120,14 @@ streamlit run app.py           # the demo UI
 python -m iwm.report           # incident brief for the blind-corner near-miss
 ```
 
-- `demo_sim.py`: the on-stage demo. Top-down warehouse in pygame with racking, forklift, walker,
+- `demo_warehouse.py`: **warehouse overview** in pygame. A 40 x 24 m site with 3 forklift aisles, 3 walkways and 9
+  blind intersections (A1..C3); 4 forklifts and 6 workers moving at once. Each intersection is ringed by its live
+  risk; when a collision is predicted a **zoomed-in pop-up** opens on that corner (the two people, predicted paths,
+  risk, time to contact, top fix). Click any corner or point (or keys 1-9) to pin the zoom; Esc / 0 for auto.
+  Keys A / M / S switch alerts, mirrors, speed limit; alerts go to the phone (`--phone wk_1` = only that worker).
+  Over 15 simulated minutes: 30% of corner encounters end in contact with no fix, 18% with a speed limit, 6% when
+  alerts reach the worker and driver, 3% with mirrors at every corner.
+- `demo_sim.py`: the single blind-corner demo. Top-down warehouse in pygame with racking, forklift, walker,
   5 s predicted paths, risk panel, alert log, and what-if keys.
 - `app.py` + `ui/`: the demo UI. The sidebar groups pages the way you present them, shows where you
   are in the presentation flow, and shows system status (results, Azure OpenAI, camera log):
@@ -169,10 +176,13 @@ iwm/
   alerts.py      tiers, hysteresis, MQTT publisher
   evaluate.py    1,000-run evaluation
   demo.py        one session (shared by pygame demo and UI)
+  warehouse.py   whole-warehouse simulation + session (demo_warehouse.py)
+  pipeline.py    real-video pipeline (UI Real video page, run_camera.py)
   shift.py       shift report: incidents, summary, exports
   report.py      Azure OpenAI briefs with template fallback
   plots.py       figures for the UI
-app.py           Streamlit UI         demo_sim.py   pygame live demo
+app.py           Streamlit UI         demo_sim.py   pygame single-corner demo
+demo_warehouse.py pygame warehouse overview with zoom pop-ups
 run_camera.py    real-video pipeline  calibrate.py  camera calibration
 phone.html       phone "wristband"    mosquitto.conf
 ```

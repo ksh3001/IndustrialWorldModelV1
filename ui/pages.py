@@ -299,6 +299,14 @@ def demo_videos():
                 else:
                     st.caption("Not recorded yet. Record it with:")
                     st.code(cmd, language="bash")
+    with st.container(border=True):
+        st.markdown("**Warehouse overview · nine blind corners (pygame)**")
+        wh = Path("data/warehouse_demo.mp4")
+        if wh.exists():
+            st.video(str(wh))
+        else:
+            st.caption("Not recorded yet. Record it with:")
+            st.code("python demo_warehouse.py --record data/warehouse_demo.mp4", language="bash")
     next_link(NAV["results"], "the evidence from 1,000 runs")
 
 

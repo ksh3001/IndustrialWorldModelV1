@@ -42,6 +42,14 @@ python demo_sim.py                                  # keys: A alerts, M mirror, 
 python demo_sim.py --record data/sim_demo.mp4       # also save it for the UI's Demo videos page
 ```
 
+## 5b. The warehouse overview (pygame)
+
+```powershell
+python demo_warehouse.py                                   # click a corner to zoom; A / M / S what-ifs
+python demo_warehouse.py --phone wk_1                      # phone gets only worker wk_1's alerts
+python demo_warehouse.py --record data/warehouse_demo.mp4  # for the UI's Demo videos page
+```
+
 ## 6. Real video
 
 **In the UI (easiest):** open **Real video**, upload a clip (or pick one from `data/`), choose

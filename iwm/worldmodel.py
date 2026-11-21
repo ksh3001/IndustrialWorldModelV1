@@ -120,10 +120,14 @@ class WorldModel:
         forklifts = [t for t in tracks if t.type == FORKLIFT]
         workers = [t for t in tracks if t.type == WORKER]
         out = []
-        futures = {t.id: self._futures(t) for t in forklifts + workers}
+        futures = {t.id: self._futures(t) for t in forklifts + workers} if forklifts and workers else {}
+        reach = lambda tr: np.hypot(tr.vx, tr.vy) * (1 + 3 * self.c["speed_noise"])  # noqa: E731
         for f in forklifts:
             for w in workers:
                 dist_now = float(np.hypot(f.x - w.x, f.y - w.y))
+                if dist_now > (reach(f) + reach(w)) * self.c["horizon_s"] + self.c["contact_m"]:
+                    out.append(PairRisk(f.id, w.id, 0.0, float("inf"), dist_now))  # too far apart to meet
+                    continue
                 if dist_now < self.c["contact_m"]:
                     p, ttc = 1.0, 0.0
                 else:
