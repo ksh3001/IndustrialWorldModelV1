@@ -18,6 +18,93 @@ Camera / Simulation ──► Tracks ──► World model (Kalman + Monte Carlo
                          Dashboard (Streamlit) + Azure OpenAI incident brief
 ```
 
+## Run it locally (quick start)
+
+Works on Windows, macOS and Linux. You need **Python 3.11 or 3.12** (3.13 works but some libraries lag) and **Git**.
+Run every command from the project folder.
+
+### 1. Get the code
+
+```bash
+git clone https://github.com/ksh3001/IndustrialWorldModelV1.git
+cd IndustrialWorldModelV1
+```
+
+### 2. Create a virtual environment and install
+
+Windows (PowerShell):
+
+```powershell
+python -m venv .venv
+.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+```
+
+macOS / Linux:
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+```
+
+The install takes a few minutes (YOLO brings PyTorch). On Windows, if activation is blocked, run
+`Set-ExecutionPolicy -Scope CurrentUser RemoteSigned` once.
+
+### 3. Check it works
+
+```bash
+pytest -q                                   # all tests pass
+python -m iwm.sim --scenario blind_corner   # prints contact_t=3.9
+```
+
+### 4. Run the apps
+
+| What | Command | Where it opens |
+|---|---|---|
+| **Web UI** (all pages) | `streamlit run app.py` | Browser, http://localhost:8501 |
+| **Single blind-corner demo** | `python demo_sim.py` | pygame window (keys: A alerts, M mirror, S speed limit, B replay, Q quit) |
+| **Warehouse overview** | `python demo_warehouse.py` | pygame window (click a corner to zoom; Esc for auto) |
+| **Real video, desktop window** | `python run_camera.py --source path/to/clip.mp4 --approx 15` | OpenCV window |
+| **Evaluation (1,000 runs)** | `python -m iwm.evaluate --runs 1000` | Writes `results/` |
+
+In the UI, the sidebar has **Overview, Live demo, Real video, Warehouse, Demo videos, Results, Shift reports, Camera
+alerts**. *Real video* takes an uploaded clip; *Warehouse* shows the whole site with an auto-zoom on risky corners.
+
+Record the pygame demos so the UI's *Demo videos* page can play them:
+
+```bash
+python demo_sim.py --record data/sim_demo.mp4
+python demo_warehouse.py --record data/warehouse_demo.mp4
+```
+
+### 5. Optional: phone alerts (ntfy, about 5 minutes)
+
+1. Install the **ntfy** app on an Android phone, tap **+**, subscribe to a hard-to-guess topic
+   (e.g. `iwm-yourteam-4821`).
+2. Copy `.env.example` to `.env` and set `NTFY_TOPIC=iwm-yourteam-4821`.
+3. Test: `python -m iwm.alerts warning`. The phone vibrates. All demos and the UI now send alerts to it.
+
+(The faster local alternative, `phone.html` + Mosquitto, is in [docs/SETUP.md](docs/SETUP.md).)
+
+### 6. Optional: Azure OpenAI incident briefs
+
+Add `AZURE_OPENAI_ENDPOINT`, `AZURE_OPENAI_API_KEY` and `AZURE_OPENAI_DEPLOYMENT` to `.env`. Without them, briefs use a
+built-in template. Never commit `.env` (it is in `.gitignore`).
+
+### Troubleshooting
+
+| Problem | Fix |
+|---|---|
+| `ModuleNotFoundError: No module named 'iwm'` | Run commands from the project folder with the virtual environment active |
+| `CERTIFICATE_VERIFY_FAILED` when YOLO downloads `yolo11n.pt` (office network) | Download https://github.com/ultralytics/assets/releases/download/v8.4.0/yolo11n.pt in a browser and put it in the project folder, or `pip install pip-system-certs` |
+| `Could not resolve host: github.com` on `git pull` / `fetch` | The laptop has no internet on this network (e.g. a phone hotspot without data); switch network or VPN |
+| Recorded video won't play in the browser | `pip install imageio-ffmpeg`, then record again |
+| `[ntfy] send failed` | No internet, or the network blocks ntfy.sh: use another network or a phone hotspot |
+| UI changes don't show after `git pull` | Stop Streamlit (Ctrl + C) and start it again; it also re-reads `.env` only at start |
+
+More detail (calibration, real video, phone.html, Mosquitto): [docs/SETUP.md](docs/SETUP.md).
+
 ## Status
 
 Built in stages, one commit per stage:
@@ -47,13 +134,6 @@ Every module exchanges two records (metres, seconds):
 ```json
 {"t": 12.4, "id": "fl_02", "type": "forklift", "x": 14.2, "y": 6.8, "vx": 2.1, "vy": -0.3}
 {"t": 12.4, "pair": ["fl_02", "wk_07"], "tier": "warning", "p_collision": 0.68, "ttc_s": 2.7}
-```
-
-## Setup
-
-```bash
-python -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
-pip install -r requirements.txt
 ```
 
 ## Stage 1 · See
