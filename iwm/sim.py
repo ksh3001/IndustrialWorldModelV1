@@ -216,6 +216,6 @@ if __name__ == "__main__":
     args = ap.parse_args()
     s = Simulation(load_config(), args.scenario, args.seed)
     fr = s.run()
-    print(f"{s.scenario}: {len(fr)} frames, contact_t={s.contact_t}, min distance={s.min_dist:.2f} m")
+    print(f"{s.scenario}: {len(fr)} frames, contact_t={None if s.contact_t is None else round(s.contact_t, 1)}, min distance={s.min_dist:.2f} m")
     if args.plot:
         _plot(fr, s)
