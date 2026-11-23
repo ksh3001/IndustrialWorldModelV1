@@ -135,6 +135,8 @@ python -m iwm.report           # incident brief for the blind-corner near-miss
     picker, what-if fix pills, outcome banner, time slider / Play, risk and time-to-contact at each moment, alerts,
     "why", incident brief, phone buzz on Play) · *Real video* (upload or pick a clip; YOLO + world model run frame by
     frame, predicted paths drawn live, alerts sent to the worker's phone as they happen, annotated video saved)
+    · *Warehouse* (the whole warehouse in the browser: 9 blind corners, 4 forklifts, 6 workers; zoom panel follows
+    the riskiest corner or a corner you pick; what-if fixes, Play / Pause / speed, counters, alert log, phone alerts)
     · *Demo videos* (real video and pygame recording side by side)
   - **Evidence:** *Results* (1,000-run comparison and what it means) · *Shift reports* (KPIs, then Summary,
     Incidents and Export tabs with hotspot map, executive summary, incident briefs, .md/.csv downloads)
@@ -176,7 +178,8 @@ iwm/
   alerts.py      tiers, hysteresis, MQTT publisher
   evaluate.py    1,000-run evaluation
   demo.py        one session (shared by pygame demo and UI)
-  warehouse.py   whole-warehouse simulation + session (demo_warehouse.py)
+  warehouse.py   whole-warehouse simulation + session (demo_warehouse.py, UI Warehouse page)
+  warehouse_render.py  Pillow drawing of the warehouse for the UI
   pipeline.py    real-video pipeline (UI Real video page, run_camera.py)
   shift.py       shift report: incidents, summary, exports
   report.py      Azure OpenAI briefs with template fallback

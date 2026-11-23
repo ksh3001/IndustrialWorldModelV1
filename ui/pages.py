@@ -271,6 +271,112 @@ def real_video():
     if out_path.exists():
         st.markdown("**Annotated video** (also saved to " + f"`{out_path}`)")
         st.video(str(out_path))
+    next_link(NAV["warehouse"], "the whole warehouse at once")
+
+
+# ---------------------------------------------------------------------------- 2c
+def warehouse():
+    from iwm.schema import TIERS
+    from iwm.sim import WhatIf
+    from iwm.warehouse import ZONES, WarehouseSession
+    from iwm.warehouse_render import render_overview, render_zoom
+
+    header("Step 4 · Warehouse", "Every blind corner at once",
+           "Four forklifts and six workers share a warehouse with nine blind corners. The zoom panel follows "
+           "the riskiest corner automatically, or pick a corner to watch it.")
+    ss = st.session_state
+    with st.container(border=True):
+        c1, c2, c3 = st.columns([3, 1, 1])
+        with c1:
+            react, mirror, limit = whatif_picker("wh_fix")
+        seed = c2.number_input("Shift", 0, 10_000, 3, help="Change for a different shift (random start).")
+        speed = c3.select_slider("Speed", options=[0.5, 1.0, 2.0, 4.0], value=1.0, format_func=lambda x: f"x{x:g}")
+        z1, z2 = st.columns([4, 2])
+        focus_pick = z1.segmented_control("Zoom", ["Auto"] + list(ZONES), default="Auto", key="wh_focus",
+                                          help="Auto follows the riskiest corner; or pick one to pin the zoom.")
+        focus_pick = focus_pick or "Auto"
+        phone_to = z2.selectbox("Phone gets alerts for", ["Nobody", "All workers"] + [f"wk_{i}" for i in range(1, 7)],
+                                index=1 if phone_ready() else 0, disabled=not phone_ready(),
+                                help="Warning and Critical alerts go to the ntfy app (NTFY_TOPIC in .env).")
+        b1, b2, b3 = st.columns([1, 1, 4])
+        playing = ss.get("wh_playing", False)
+        if b1.button("Pause" if playing else "Play", icon=":material/pause:" if playing else ":material/play_arrow:",
+                     type="primary"):
+            ss["wh_playing"] = playing = not playing
+        reset = b2.button("Reset", icon=":material/restart_alt:")
+
+    key = (seed, react, mirror, limit)
+    if reset or ss.get("wh_key") != key or "wh" not in ss:
+        ss["wh"] = WarehouseSession(CFG, int(seed), WhatIf(mirror=mirror, speed_limit=limit,
+                                                           workers_react_to_alerts=react))
+        ss["wh"].step()
+        ss["wh_key"], ss["wh_auto"], ss["wh_contacts"], ss["wh_sent"] = key, None, [], {}
+    s = ss["wh"]
+
+    left, right = st.columns([3, 2], gap="medium")
+    over_box, zoom_box = left.empty(), right.empty()
+    k = st.columns(5)
+    boxes = [col.empty() for col in k]
+    log_box = st.empty()
+
+    def focus_now():
+        f = s.frame
+        if focus_pick != "Auto":
+            return ZONES[focus_pick], focus_pick
+        hot, cur = s.hottest(), ss.get("wh_auto")
+        if hot:
+            cur_z = f.zones[cur[0][1]] if cur else None
+            if cur_z is None or cur_z.tier == "none" or TIERS.index(hot.tier) > TIERS.index(cur_z.tier):
+                ss["wh_auto"] = ((ZONES[hot.zone], hot.zone), f.t + 3.0)
+            else:
+                ss["wh_auto"] = (cur[0], f.t + 3.0)
+        elif cur and f.t > cur[1]:
+            ss["wh_auto"] = None
+        return ss["wh_auto"][0] if ss.get("wh_auto") else None
+
+    def show():
+        f = s.frame
+        focus = focus_now()
+        over_box.image(render_overview(s, f, focus, ss["wh_contacts"]))
+        if focus:
+            zoom_box.image(render_zoom(s, f, focus))
+        else:
+            zoom_box.info("All corners clear. The zoom opens here when a collision is predicted, "
+                          "or pick a corner above.", icon=":material/zoom_in:")
+        st_ = s.stats()
+        for box, (label, value) in zip(boxes, [("Time", f"{st_['t']:.0f} s"), ("Corner encounters", st_["encounters"]),
+                                               ("Collisions", st_["contacts"]), ("Warnings", st_["warning"]),
+                                               ("Critical", st_["critical"])]):
+            box.metric(label, value)
+        if s.alerts:
+            log_box.dataframe([a.to_dict() | {"zone": s.alert_zone.get(id(a), ""),
+                                              "tier": f"{TIER_ICON[a.tier]} {a.tier}",
+                                              "pair": " / ".join(a.pair)} for a in s.alerts[-12:][::-1]],
+                              column_order=["t", "zone", "tier", "pair", "p_collision", "ttc_s", "cause"],
+                              column_config=ALERT_COLUMNS, hide_index=True)
+
+    show()
+    if not playing:
+        st.caption("Press Play to run the shift. Change the zoom, fixes or speed at any time.")
+    dt = CFG["sim"]["dt"]
+    while playing and s.wh.t < 600:  # up to 10 minutes per shift
+        t_frame = time.time()
+        for _ in range(2):  # 0.2 s of warehouse time per screen update
+            f = s.step()
+            ss["wh_contacts"] = [c for c in ss["wh_contacts"] if f.t - c.t < 2.0] + f.new_contacts
+            for a in f.new_alerts:
+                if a.tier in ("warning", "critical"):
+                    st.toast(f"{TIER_ICON[a.tier]} {a.tier.upper()} at {s.alert_zone.get(id(a), '')}: "
+                             f"{a.pair[0]} / {a.pair[1]}")
+                    wanted = phone_to == "All workers" or phone_to == a.pair[1]
+                    if wanted and time.time() - ss["wh_sent"].get(tuple(a.pair), 0) > 4:
+                        get_publisher().send(a)
+                        ss["wh_sent"][tuple(a.pair)] = time.time()
+        show()
+        time.sleep(max(0.0, 2 * dt / speed - (time.time() - t_frame)))
+    if playing and s.wh.t >= 600:
+        ss["wh_playing"] = False
+        st.success("Shift finished. Press Reset to start again.")
     next_link(NAV["videos"], "real video and simulation side by side")
 
 
@@ -278,7 +384,7 @@ def real_video():
 def demo_videos():
     from pathlib import Path
 
-    header("Step 4 · Demo videos", "Real video and simulation, side by side",
+    header("Step 5 · Demo videos", "Real video and simulation, side by side",
            "Left: tracking on real CCTV-style footage. Right: the pygame simulation, where thousands of "
            "near-misses can be tested safely.")
     left, right = st.columns(2, gap="large")
@@ -312,7 +418,7 @@ def demo_videos():
 
 # ----------------------------------------------------------------------------- 4
 def results():
-    header("Step 5 · Results", "The evidence: 1,000 simulated encounters",
+    header("Step 6 · Results", "The evidence: 1,000 simulated encounters",
            "World model vs a detection-only camera that alerts when a pair is already under 2 m apart.")
     res = load_results()
     if not res:
@@ -340,7 +446,7 @@ def results():
 
 # ----------------------------------------------------------------------------- 5
 def reports():
-    header("Step 6 · Shift reports", "What a site manager sees after a shift",
+    header("Step 7 · Shift reports", "What a site manager sees after a shift",
            "Every alert becomes an incident with a brief, a hotspot and a suggested fix.")
     with st.container(border=True):
         c1, c2 = st.columns([3, 1])

@@ -42,7 +42,12 @@ python demo_sim.py                                  # keys: A alerts, M mirror, 
 python demo_sim.py --record data/sim_demo.mp4       # also save it for the UI's Demo videos page
 ```
 
-## 5b. The warehouse overview (pygame)
+## 5b. The warehouse overview
+
+In the UI: sidebar → **Warehouse** → **Play**. Pick a corner under *Zoom* (or leave *Auto*), switch fixes on, and
+choose which worker's alerts go to the phone.
+
+In pygame (desktop window, click a corner to zoom):
 
 ```powershell
 python demo_warehouse.py                                   # click a corner to zoom; A / M / S what-ifs
