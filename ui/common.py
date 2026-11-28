@@ -96,6 +96,9 @@ def sidebar_extras(current: str, flow: list[str]) -> None:
             ("World model", True, "ready"),
             ("Evaluation results", RESULTS.exists(), "loaded" if RESULTS.exists() else "run iwm.evaluate"),
             ("Azure OpenAI", azure_ready(), "connected" if azure_ready() else "template briefs"),
+            ("Trained model", model_ready(), (f"hybrid {CFG['world_model'].get('learned_share', 0.5):.0%}"
+                                              if CFG["world_model"].get("mode") != "kalman" else "loaded, off")
+             if model_ready() else "run train_motion.py"),
             ("Phone (ntfy)", phone_ready(), f"topic {NtfyNotifier(CFG).topic}" if phone_ready() else "set NTFY_TOPIC in .env"),
             ("Camera log", CAMERA_LOG.exists(), "receiving" if CAMERA_LOG.exists() else "no video yet"),
         ]
@@ -120,9 +123,41 @@ def get_camera_publisher() -> Publisher:
     return Publisher(CFG, log_path=str(CAMERA_LOG), beep=False)
 
 
+MODES = {"Hybrid (trained + Kalman)": "hybrid", "Kalman only": "kalman"}
+
+
+def cfg_for(mode: str) -> dict:
+    """A copy of the config with the world-model mode switched (kalman / hybrid)."""
+    import copy
+
+    c = copy.deepcopy(CFG)
+    c["world_model"]["mode"] = mode
+    return c
+
+
+def model_ready() -> bool:
+    from iwm.learned import load_cached
+
+    return load_cached(CFG["world_model"].get("learned_model", "models/motion.npz")) is not None
+
+
+def mode_picker(key: str) -> str:
+    """World-model switch shown on the simulation pages; returns 'hybrid' or 'kalman'."""
+    if not model_ready():
+        st.caption("World model: Kalman only (no trained model yet: run `python train_motion.py`).")
+        return "kalman"
+    share = CFG["world_model"].get("learned_share", 0.5)
+    default = "Hybrid (trained + Kalman)" if CFG["world_model"].get("mode", "kalman") != "kalman" else "Kalman only"
+    label = st.segmented_control("World model", list(MODES), default=default, key=key,
+                                 help=f"Hybrid: {share:.0%} of the 50 futures come from the trained motion model, "
+                                      "the rest from Kalman rules.") or default
+    return MODES[label]
+
+
 @st.cache_resource(show_spinner="Rolling 50 futures per frame...")
-def run_session(scenario: str, seed: int, react: bool, mirror: bool, limit: bool) -> DemoSession:
-    s = DemoSession(CFG, scenario, int(seed), WhatIf(mirror=mirror, speed_limit=limit, workers_react_to_alerts=react))
+def run_session(scenario: str, seed: int, react: bool, mirror: bool, limit: bool, mode: str = "kalman") -> DemoSession:
+    s = DemoSession(cfg_for(mode), scenario, int(seed),
+                    WhatIf(mirror=mirror, speed_limit=limit, workers_react_to_alerts=react))
     s.run()
     return s
 

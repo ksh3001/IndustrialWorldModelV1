@@ -4,6 +4,7 @@
     python run_camera.py --source data/samples/clip.mp4 --approx 15   # uncalibrated: frame ~15 m wide
     python run_camera.py --source 0                                   # webcam / phone camera
     python run_camera.py --source data/demo.mp4 --save data/camera_demo.mp4   # record for the UI
+    python run_camera.py --source clip.mp4 --approx 15 --headless --log-tracks  # save tracks for training
 
 Shows the video with boxes, speeds, predicted paths and the alert tier. Press q to quit.
 Alerts go to the phone (ntfy app if NTFY_TOPIC is set; phone.html if Mosquitto runs) and to
@@ -27,6 +28,8 @@ def main():
     ap.add_argument("--stride", type=int, default=1, help="process every Nth frame (faster on CPU)")
     ap.add_argument("--save", default=None, help="save the annotated video (e.g. data/camera_demo.mp4)")
     ap.add_argument("--headless", action="store_true", help="no window (just record / alert)")
+    ap.add_argument("--log-tracks", nargs="?", const="auto", default=None,
+                    help="save tracks for training the motion model (default logs/tracks/<clip>.jsonl)")
     args = ap.parse_args()
 
     cfg = load_config()
@@ -36,7 +39,12 @@ def main():
         w, h, _ = video_info(int(source) if str(source).isdigit() else source)
         mapper = ApproxScale(w, h, args.approx)
     perception = Perception(cfg, source, mapper=mapper, stride=args.stride)
-    pipe = VideoPipeline(cfg, perception.homography, Publisher(cfg))
+    track_log = None
+    if args.log_tracks:
+        from iwm.tracklog import TrackLogger, default_path
+
+        track_log = TrackLogger(default_path(source) if args.log_tracks == "auto" else args.log_tracks)
+    pipe = VideoPipeline(cfg, perception.homography, Publisher(cfg), track_log)
     recorder = None
     if args.save:
         from iwm.video import VideoRecorder
@@ -54,6 +62,8 @@ def main():
 
     if recorder:
         recorder.close()
+    if track_log:
+        track_log.close()
     if not args.headless:
         cv2.destroyAllWindows()
     print(f"Done: {len(pipe.alerts)} alerts, peak tier {pipe.peak}.")

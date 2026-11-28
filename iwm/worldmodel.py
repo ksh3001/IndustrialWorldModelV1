@@ -13,6 +13,7 @@
 
 from __future__ import annotations
 
+from collections import deque
 from dataclasses import dataclass, field
 
 import numpy as np
@@ -66,6 +67,20 @@ class WorldModel:
         self.types: dict[str, str] = {}
         self.last_seen: dict[str, float] = {}
         self.tracks: dict[str, Track] = {}
+        # Hybrid world model: part of the futures come from the learned motion model (iwm/learned.py)
+        self.mode = c.get("mode", "kalman")
+        self.learned_share = float(c.get("learned_share", 0.5)) if self.mode != "kalman" else 0.0
+        if self.mode == "learned":
+            self.learned_share = 1.0
+        self.learned = None
+        if self.learned_share > 0:
+            from .learned import load_cached
+
+            self.learned = load_cached(c.get("learned_model", "models/motion.npz"))
+            if self.learned is None:
+                self.learned_share = 0.0  # no trained model yet: Kalman only
+        self.history: dict[str, deque] = {}
+        self.stats = {"learned": 0, "kalman": 0}  # how many tracks used each, for the UI
 
     # --------------------------------------------------------------- tracking
     def update(self, t: float, detections) -> list[Track]:
@@ -81,15 +96,48 @@ class WorldModel:
             self.types[d["id"]] = d["type"]
             self.last_seen[d["id"]] = t
             self.tracks[d["id"]] = Track(t, d["id"], d["type"], *map(float, s))
+            if self.learned is not None:
+                self.history.setdefault(d["id"], deque(maxlen=200)).append((t, float(s[0]), float(s[1])))
         for tid in [i for i, ts in self.last_seen.items() if t - ts > 1.0]:  # forget lost tracks
-            for store in (self.filters, self.types, self.last_seen, self.tracks):
+            for store in (self.filters, self.types, self.last_seen, self.tracks, self.history):
                 store.pop(tid, None)
         return list(self.tracks.values())
 
     # ---------------------------------------------------------------- futures
+    def _history_grid(self, tid: str) -> np.ndarray | None:
+        """Last `history_s` seconds of smoothed positions on a 0.1 s grid, or None if too short."""
+        h = self.history.get(tid)
+        need = self.learned.history_s
+        if not h or h[-1][0] - h[0][0] < need - 0.05:
+            return None
+        a = np.array(h)
+        grid = a[-1, 0] - np.arange(self.learned.H - 1, -1, -1) * 0.1
+        return np.stack([np.interp(grid, a[:, 0], a[:, 1]), np.interp(grid, a[:, 0], a[:, 2])], axis=1)
+
     def _futures(self, tr: Track, speed_scale: float = 1.0, frozen: bool = False) -> np.ndarray:
-        """Sample possible future positions, shape (rollouts, steps, 2)."""
-        n, c = self.c["rollouts"], self.c
+        """Sample possible future positions, shape (rollouts, steps, 2).
+
+        Hybrid mode: `learned_share` of the futures come from the learned motion model, the rest
+        from the Kalman rules below. Tracks with less than `history_s` of history use Kalman only.
+        """
+        n_total = self.c["rollouts"]
+        n_learned = int(round(n_total * self.learned_share)) if not frozen and speed_scale == 1.0 else 0
+        hist = self._history_grid(tr.id) if n_learned else None
+        if hist is None:
+            n_learned = 0
+        k = self._kalman_futures(tr, n_total - n_learned, speed_scale, frozen)
+        if not n_learned:
+            self.stats["kalman"] += 1
+            return k
+        self.stats["learned"] += 1
+        lf = self.learned.sample(hist, tr.vx, tr.vy, tr.type == FORKLIFT, n_learned, self.steps, self.rng)
+        return np.concatenate([k, lf], axis=0) if len(k) else lf
+
+    def _kalman_futures(self, tr: Track, n: int, speed_scale: float = 1.0, frozen: bool = False) -> np.ndarray:
+        """The original rule-based futures: constant velocity plus noise and walker stops."""
+        c = self.c
+        if n <= 0:
+            return np.zeros((0, self.steps, 2))
         if frozen:
             return np.broadcast_to([tr.x, tr.y], (n, self.steps, 2)).copy()
         speed = np.hypot(tr.vx, tr.vy) * speed_scale

@@ -13,8 +13,8 @@ from iwm.plots import floor_plot, hotspot_plot, risk_timeline
 from iwm.report import executive_summary, incident_brief
 from iwm.shift import incidents_csv, shift_report_markdown, shift_summary
 
-from .common import (CAMERA_LOG, CFG, TIER_ICON, badge, get_camera_publisher, get_publisher, header, load_results,
-                     next_link, phone_ready, run_session, run_shift, whatif_picker)
+from .common import (CAMERA_LOG, CFG, TIER_ICON, badge, cfg_for, get_camera_publisher, get_publisher, header,
+                     load_results, mode_picker, next_link, phone_ready, run_session, run_shift, whatif_picker)
 from iwm.schema import Alert
 
 NAV: dict = {}  # filled by app.py: name -> st.Page, used for "Next" links
@@ -73,6 +73,7 @@ def live_demo():
         label = c1.segmented_control("Scenario", list(SCENARIOS), default="Blind corner (demo)") or "Blind corner (demo)"
         seed = c2.number_input("Seed", 0, 10_000, 1, help="Change for a different random encounter.")
         react, mirror, limit = whatif_picker("live_fix")
+        wm_mode = mode_picker("live_mode")
         p1, p2 = st.columns([3, 1])
         buzz = p1.toggle("Buzz phone on Play", value=phone_ready(), disabled=not phone_ready(),
                          help="Sends each alert to the ntfy app at the moment it happens. "
@@ -83,7 +84,7 @@ def live_demo():
                 st.toast("Test alert sent to the phone", icon=":material/check_circle:")
             else:
                 st.toast("Send failed: check internet (try the phone's hotspot)", icon=":material/error:")
-    s = run_session(SCENARIOS[label], seed, react, mirror, limit)
+    s = run_session(SCENARIOS[label], seed, react, mirror, limit, wm_mode)
     sm = s.summary()
 
     if sm["contact_s"] is not None:
@@ -191,6 +192,9 @@ def real_video():
                          help="ntfy app (NTFY_TOPIC in .env), plus phone.html if Mosquitto is running.")
         realtime = o2.toggle("Play in real time", value=True,
                              help="Off = process as fast as possible.")
+        save_tracks = st.toggle("Save tracks for training the world model", value=False,
+                                help="Writes logs/tracks/<clip>.jsonl. Then: python train_motion.py "
+                                     "--real \"logs/tracks/*.jsonl\"")
         start = st.button("Analyse video", icon=":material/play_arrow:", type="primary")
 
     source = None
@@ -229,7 +233,12 @@ def real_video():
                 f"2. Put `{model}` in the project folder (next to `app.py`) and press **Analyse video** again.\n\n"
                 f"Permanent fix: `pip install pip-system-certs`, then restart the UI.")
             return
-    pipe = VideoPipeline(CFG, perception.homography, get_camera_publisher() if buzz else None)
+    track_log = None
+    if save_tracks:
+        from iwm.tracklog import TrackLogger, default_path
+
+        track_log = TrackLogger(default_path(source))
+    pipe = VideoPipeline(CFG, perception.homography, get_camera_publisher() if buzz else None, track_log)
     out_path = Path("data/processed") / f"{source.stem}_annotated.mp4"
     recorder = VideoRecorder(str(out_path), fps=(fps or 15) / stride)
 
@@ -259,6 +268,10 @@ def real_video():
         if realtime:
             time.sleep(max(0.0, t - (time.time() - t0)))
     recorder.close()
+    if track_log:
+        track_log.close()
+        st.info(f"Saved {track_log.count:,} tracked positions to `{track_log.path}` for training.",
+                icon=":material/model_training:")
     progress.empty()
 
     if pipe.alerts:
@@ -289,6 +302,7 @@ def warehouse():
         c1, c2, c3 = st.columns([3, 1, 1])
         with c1:
             react, mirror, limit = whatif_picker("wh_fix")
+            wm_mode = mode_picker("wh_mode")
         seed = c2.number_input("Shift", 0, 10_000, 3, help="Change for a different shift (random start).")
         speed = c3.select_slider("Speed", options=[0.5, 1.0, 2.0, 4.0], value=1.0, format_func=lambda x: f"x{x:g}")
         z1, z2 = st.columns([4, 2])
@@ -305,9 +319,9 @@ def warehouse():
             ss["wh_playing"] = playing = not playing
         reset = b2.button("Reset", icon=":material/restart_alt:")
 
-    key = (seed, react, mirror, limit)
+    key = (seed, react, mirror, limit, wm_mode)
     if reset or ss.get("wh_key") != key or "wh" not in ss:
-        ss["wh"] = WarehouseSession(CFG, int(seed), WhatIf(mirror=mirror, speed_limit=limit,
+        ss["wh"] = WarehouseSession(cfg_for(wm_mode), int(seed), WhatIf(mirror=mirror, speed_limit=limit,
                                                            workers_react_to_alerts=react))
         ss["wh"].step()
         ss["wh_key"], ss["wh_auto"], ss["wh_contacts"], ss["wh_sent"] = key, None, [], {}
@@ -441,6 +455,31 @@ def results():
                     f"- Fewer false alarms means workers keep trusting the buzz.")
     with st.expander("Full numbers"):
         st.json(res)
+
+    st.subheader("Trained world model (hybrid)")
+    from pathlib import Path
+
+    mres = Path("results/motion_results.json")
+    if mres.exists():
+        m = json.loads(mres.read_text())
+        acc = m["accuracy"].get("real") or m["accuracy"]["simulation"]
+        rows = {r["learned_share"]: r for r in m["safety"]}
+        k0, h5 = rows.get(0.0), rows.get(0.5)
+        c = st.columns(3)
+        c[0].metric("Prediction error at 5 s", f"{acc['learned']['5s']:.2f} m",
+                    f"{acc['learned']['5s'] - acc['kalman']['5s']:+.2f} m vs Kalman", delta_color="inverse")
+        if k0 and h5:
+            c[1].metric("False alarms per hour (hybrid 50/50)", f"{h5['false_alarms_per_hour']:.1f}",
+                        f"{h5['false_alarms_per_hour'] - k0['false_alarms_per_hour']:+.1f} vs Kalman",
+                        delta_color="inverse")
+            c[2].metric("Warning before contact (hybrid)", f"{h5['lead_first_alert_mean_s']:.1f} s",
+                        f"{h5['lead_first_alert_mean_s'] - k0['lead_first_alert_mean_s']:+.2f} s vs Kalman")
+        st.image(str(mres.with_suffix(".png")))
+        src = "real video" if m["accuracy"].get("real") else "simulation"
+        st.caption(f"Prediction error on unseen {src} tracks; safety on {m['runs']} blind-corner runs per mix. "
+                   "Re-run: python evaluate_motion.py")
+    else:
+        st.info("Train and evaluate the model: `python train_motion.py`, then `python evaluate_motion.py`.")
     next_link(NAV["reports"], "the shift report for site managers")
 
 

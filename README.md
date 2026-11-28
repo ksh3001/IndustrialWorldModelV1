@@ -67,6 +67,8 @@ python -m iwm.sim --scenario blind_corner   # prints contact_t=3.9
 | **Warehouse overview** | `python demo_warehouse.py` | pygame window (click a corner to zoom; Esc for auto) |
 | **Real video, desktop window** | `python run_camera.py --source path/to/clip.mp4 --approx 15` | OpenCV window |
 | **Evaluation (1,000 runs)** | `python -m iwm.evaluate --runs 1000` | Writes `results/` |
+| **Train the motion model** | `python train_motion.py` (add `--real "logs/tracks/*.jsonl"` for real video) | Writes `models/motion.npz` |
+| **Kalman vs hybrid comparison** | `python evaluate_motion.py` | Writes `results/motion_results.*` |
 
 In the UI, the sidebar has **Overview, Live demo, Real video, Warehouse, Demo videos, Results, Shift reports, Camera
 alerts**. *Real video* takes an uploaded clip; *Warehouse* shows the whole site with an auto-zoom on risky corners.
@@ -123,6 +125,7 @@ Built in stages, one commit per stage:
 |---|---|
 | [docs/IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md) | The implementation plan this repo was built from, plus plan-vs-build notes |
 | [docs/Industrial_World_Model_Detailed_Plan.pdf](docs/Industrial_World_Model_Detailed_Plan.pdf) | Full solution plan: problem, architecture, scope, demo script, judge Q&A |
+| [docs/HYBRID_WORLD_MODEL.md](docs/HYBRID_WORLD_MODEL.md) | Hybrid world model: trained motion model + Kalman rules, results, training on real video |
 | [docs/SETUP.md](docs/SETUP.md) | Run it on your laptop (Windows PowerShell, step by step) |
 | [docs/architecture.png](docs/architecture.png) | System architecture diagram |
 | [docs/ui-preview/](docs/ui-preview/) | Previews of the UI and the pygame window |
@@ -157,6 +160,9 @@ python calibrate.py --source data/demo.mp4          # click 4 floor markers -> i
   median time of first contact.
 - `explain()` re-runs the futures with one factor changed (forklift slows, worker stops, forklift
   stops) and ranks which change lowers risk most.
+- **Hybrid mode** (default): half of the 50 futures come from a trained motion model (`iwm/learned.py`), half from
+  the Kalman rules. On simulation it cuts false alarms from 14 to 8 per hour with the same warning time. See
+  [docs/HYBRID_WORLD_MODEL.md](docs/HYBRID_WORLD_MODEL.md).
 - `detection_only()` is the baseline we compare against: alert only when a pair is already < 2 m apart.
 
 ```bash
@@ -261,11 +267,16 @@ iwm/
   warehouse.py   whole-warehouse simulation + session (demo_warehouse.py, UI Warehouse page)
   warehouse_render.py  Pillow drawing of the warehouse for the UI
   pipeline.py    real-video pipeline (UI Real video page, run_camera.py)
+  learned.py     trained motion model (NumPy MLP) for the hybrid world model
+  dataset.py     training windows from simulation and real track logs
+  tracklog.py    saves real-video tracks for training
   shift.py       shift report: incidents, summary, exports
   report.py      Azure OpenAI briefs with template fallback
   plots.py       figures for the UI
 app.py           Streamlit UI         demo_sim.py   pygame single-corner demo
 demo_warehouse.py pygame warehouse overview with zoom pop-ups
+train_motion.py  train the motion model    evaluate_motion.py  Kalman vs hybrid comparison
+models/motion.npz  trained motion model (pretrained on simulation)
 run_camera.py    real-video pipeline  calibrate.py  camera calibration
 phone.html       phone "wristband"    mosquitto.conf
 ```

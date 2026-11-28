@@ -21,6 +21,12 @@ world_model:
   heading_noise_forklift: 0.08 # radians
   walker_stop_prob: 0.15  # chance a walker stops at some point in a future
   seed: 7
+  # Hybrid world model: part of the futures come from a trained motion model (train_motion.py).
+  #   kalman  = rules only (original)    hybrid = learned_share from the model, the rest from rules
+  #   learned = model only. Falls back to kalman if the model file is missing or a track is too new.
+  mode: hybrid
+  learned_share: 0.5
+  learned_model: models/motion.npz
 
 alerts:
   # tier: [min probability, max time-to-contact in seconds]

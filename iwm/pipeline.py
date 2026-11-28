@@ -32,13 +32,15 @@ class StepInfo:
 
 
 class VideoPipeline:
-    def __init__(self, cfg: dict, mapper, publisher=None):
-        self.cfg, self.mapper, self.pub = cfg, mapper, publisher
+    def __init__(self, cfg: dict, mapper, publisher=None, track_log=None):
+        self.cfg, self.mapper, self.pub, self.track_log = cfg, mapper, publisher, track_log
         self.wm, self.engine = WorldModel(cfg), AlertEngine(cfg)
         self.alerts: list[Alert] = []
         self.peak = "none"
 
     def step(self, frame: np.ndarray, t: float, dets: list[dict]) -> tuple[np.ndarray, StepInfo]:
+        if self.track_log:
+            self.track_log.write(t, dets)
         tracks = self.wm.update(t, dets)
         risks = self.wm.risk(tracks)
         new = self.engine.update(t, risks)
